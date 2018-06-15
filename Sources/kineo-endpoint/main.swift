@@ -11,6 +11,13 @@ import SPARQLSyntax
 import Kineo
 import Vapor
 
+public struct ServiceDescription {
+    public var supportedLanguages: [QueryLanguage]
+    public var resultFormats: [SPARQLContentNegotiator.ResultFormat]
+    public var extensionFunctions: [URL]
+    public var features: [String]
+    public var graphDescriptions: [Term:GraphDescription]
+}
 
 struct EndpointError : Error {
     var status: HTTPResponseStatus
@@ -107,30 +114,93 @@ func parseAcceptLanguages(_ value: String) -> [(String, Double)] {
     return accept
 }
 
-let app = try Application()
-let router = try app.make(Router.self)
-router.get("sparql") { (req) -> HTTPResponse in
+private func serialize(serviceDescription sd: ServiceDescription, for components: URLComponents) -> HTTPResponse {
+    var c = components
+    c.fragment = nil
+    if let qi = c.queryItems {
+        let ignore = Set(["query", "default-graph-uri", "named-graph-uri"])
+        c.queryItems = qi.filter { !ignore.contains($0.name.lowercased()) }
+    } else {
+        c.query = nil
+    }
+    let url = c.url!
+    
+    var output = """
+    @prefix sd: <http://www.w3.org/ns/sparql-service-description#> .
+    @prefix void: <http://rdfs.org/ns/void#> .
+    
+    [] a sd:Service ;
+        sd:endpoint <\(url.absoluteString)> ;
+    
+    """
+
+    if sd.supportedLanguages.count > 0 {
+        output += "    sd:supportedLanguage \(sd.supportedLanguages.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
+    }
+    
+    if sd.resultFormats.count > 0 {
+        output += "    sd:resultFormat \(sd.resultFormats.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
+    }
+    
+    if sd.extensionFunctions.count > 0 {
+        output += "    sd:extensionFunction \(sd.extensionFunctions.map {"\(Term(iri: $0.absoluteString))"}.joined(separator: ", ")) ;\n"
+    }
+    
+    if sd.features.count > 0 {
+        output += "    sd:feature \(sd.features.map {"\(Term(iri: $0))"}.joined(separator: ", ")) ;\n"
+    }
+    
+     // TODO: serialize sd.graphDescriptions
+    
+    output += "\t.\n"
+
+    var resp = HTTPResponse(status: .ok, body: output)
+    resp.headers.add(name: "Content-Type", value: "text/turtle")
+    return resp
+}
+
+private func get(req : Request, database: FilePageDatabase) throws -> HTTPResponse {
     do {
         let u = req.http.url
         guard let components = URLComponents(string: u.absoluteString) else { throw EndpointError(status: .badRequest, message: "Failed to access URL components") }
         let queryItems = components.queryItems ?? []
         let queries = queryItems.filter { $0.name == "query" }.compactMap { $0.value }
-        guard let sparql = queries.first else { throw EndpointError(status: .badRequest, message: "No query supplied") }
-        guard let sparqlData = sparql.data(using: .utf8) else { throw EndpointError(status: .badRequest, message: "Failed to interpret SPARQL as utf-8") }
-        guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
-        let query = try p.parseQuery()
-        let n = SPARQLContentNegotiator()
-        let accept = req.http.headers["Accept"]
-        let serializer = n.negotiateSerializer(for: accept)
-        if language, let header = req.http.headers["Accept-Language"].first {
-            let acceptLanguages = parseAcceptLanguages(header)
-            let store = try LanguagePageQuadStore(database: database, acceptLanguages: acceptLanguages)
-            let ds = try dataset(from: components, for: store)
-            return try evaluate(query, using: store, dataset: ds, serializedWith: serializer)
+        let negotiator = SPARQLContentNegotiator()
+        if let sparql = queries.first {
+            guard let sparqlData = sparql.data(using: .utf8) else { throw EndpointError(status: .badRequest, message: "Failed to interpret SPARQL as utf-8") }
+            guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
+            let query = try p.parseQuery()
+            let accept = req.http.headers["Accept"]
+            let serializer = negotiator.negotiateSerializer(for: accept)
+            if language, let header = req.http.headers["Accept-Language"].first {
+                let acceptLanguages = parseAcceptLanguages(header)
+                let store = try LanguagePageQuadStore(database: database, acceptLanguages: acceptLanguages)
+                let ds = try dataset(from: components, for: store)
+                return try evaluate(query, using: store, dataset: ds, serializedWith: serializer)
+            } else {
+                let store = try PageQuadStore(database: database)
+                let ds = try dataset(from: components, for: store)
+                return try evaluate(query, using: store, dataset: ds, serializedWith: serializer)
+            }
         } else {
-            let store = try PageQuadStore(database: database)
-            let ds = try dataset(from: components, for: store)
-            return try evaluate(query, using: store, dataset: ds, serializedWith: serializer)
+            do {
+                let store = try PageQuadStore(database: database)
+                let ds = try dataset(from: components, for: store)
+                let e = SimpleQueryEvaluator(store: store, dataset: ds, verbose: false)
+                let features : [String] = e.supportedFeatures.map { $0.rawValue }
+                let sd = ServiceDescription(
+                    supportedLanguages: e.supportedLanguages,
+                    resultFormats: negotiator.supportedSerializations,
+                    extensionFunctions: [],
+                    features: features,
+                    graphDescriptions: [:] // TODO: add graph descriptions
+                )
+                
+                return serialize(serviceDescription: sd, for: components)
+            } catch let e {
+                let output = "*** Failed to generate service description: \(e)"
+                return HTTPResponse(status: .internalServerError, body: output)
+            }
         }
     } catch let e {
         if let err = e as? EndpointError {
@@ -139,6 +209,12 @@ router.get("sparql") { (req) -> HTTPResponse in
         let output = "*** Failed to evaluate query:\n*** - \(e)"
         return HTTPResponse(status: .internalServerError, body: output)
     }
+}
+
+let app = try Application()
+let router = try app.make(Router.self)
+router.get("sparql") { (req) in
+    return try get(req: req, database: database)
 }
 
 router.post("sparql") { (req) -> HTTPResponse in
