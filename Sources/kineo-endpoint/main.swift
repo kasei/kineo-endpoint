@@ -214,7 +214,10 @@ private func get(req : Request, database: FilePageDatabase) throws -> HTTPRespon
     }
 }
 
-let app = try Application()
+var services = Services.default()
+//services.register(NIOServerConfig.default(hostname: "0.0.0.0", port: 8080))
+
+let app = try Application(services: services)
 let router = try app.make(Router.self)
 router.get("sparql") { (req) in
     return try get(req: req, database: database)
