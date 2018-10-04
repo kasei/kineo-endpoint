@@ -11,10 +11,13 @@ WORKDIR /work
 COPY Package.swift .
 COPY Sources Sources
 RUN swift build
+COPY entrypoint.sh entrypoint.sh
 
 RUN mkdir /endpoint
 
 EXPOSE 8080
 VOLUME ["/data"]
-ENV PATH="/work/.build/debug:${PATH}"
+ENV PATH="/work:/work/.build/debug:${PATH}"
+
+ENTRYPOINT ["/work/entrypoint.sh"]
 CMD ["kineo-endpoint"]
