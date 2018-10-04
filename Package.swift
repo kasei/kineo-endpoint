@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "kineo-endpoint",
     dependencies: [
-        .package(url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.20")),
+        .package(url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.21")),
         .package(url: "https://github.com/vapor/vapor.git", .upToNextMinor(from: "3.0.0")),
     ],
     targets: [
