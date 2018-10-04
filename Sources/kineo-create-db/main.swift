@@ -119,7 +119,11 @@ if let next = args.peek(), next == "-v" {
 }
 
 guard let filename = args.next() else { fatalError("Missing filename") }
-guard let database = FilePageDatabase(filename, size: pageSize) else { warn("Failed to open \(filename)"); exit(1) }
+guard filename != "" else {
+    warn("No database filename found in CommandLine.arguments: \(CommandLine.arguments)")
+    exit(1)
+}
+guard let database = FilePageDatabase(filename, size: pageSize) else { warn("Failed to open database file '\(filename)'"); exit(1) }
 let startTime = getCurrentTime()
 let startSecond = getCurrentDateSeconds()
 var count = 0

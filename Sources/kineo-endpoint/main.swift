@@ -101,7 +101,11 @@ while true {
     break
 }
 
-guard let database = FilePageDatabase(filename, size: pageSize) else { warn("Failed to open \(filename)"); exit(1) }
+guard filename != "" else {
+    warn("No database filename found in CommandLine.arguments: \(CommandLine.arguments)")
+    exit(1)
+}
+guard let database = FilePageDatabase(filename, size: pageSize) else { warn("Failed to open database file '\(filename)'"); exit(1) }
 
 struct ProtocolRequest : Codable {
     var query: String
@@ -215,7 +219,7 @@ private func get(req : Request, database: FilePageDatabase) throws -> HTTPRespon
 }
 
 var services = Services.default()
-//services.register(NIOServerConfig.default(hostname: "0.0.0.0", port: 8080))
+services.register(NIOServerConfig.default(hostname: "0.0.0.0", port: 8080))
 
 let app = try Application(services: services)
 let router = try app.make(Router.self)
