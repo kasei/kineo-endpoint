@@ -32,5 +32,10 @@ guard filename != "" else {
 }
 guard let database = FilePageDatabase(filename, size: pageSize) else { warn("Failed to open database file '\(filename)'"); exit(1) }
 
-let app = try endpointApplication(for: database, bindTo: ("0.0.0.0", 8080), languageConneg: language)
+var services = Services.default()
+let hostname = "0.0.0.0"
+let port = 8080
+services.register(NIOServerConfig.default(hostname: hostname, port: port))
+
+let app = try endpointApplication(for: database, useLanguageConneg: language, services: services)
 try app.run()

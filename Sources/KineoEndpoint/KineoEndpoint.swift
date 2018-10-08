@@ -188,14 +188,8 @@ private func get<D: PageDatabase>(req : Request, database: D, useLanguageConneg 
     }
 }
 
-public func endpointApplication<D: PageDatabase>(for database: D, bindTo bind: (String, Int)? = nil, languageConneg language: Bool = false) throws -> Application {
-    var services = Services.default()
-    if let bind = bind {
-        let hostname = bind.0
-        let port = bind.1
-        services.register(NIOServerConfig.default(hostname: hostname, port: port))
-    }
-    
+public func endpointApplication<D: PageDatabase>(for database: D, useLanguageConneg language: Bool = false, services: Services? = nil) throws -> Application {
+    let services = services ?? Services.default()
     let app = try Application(services: services)
     let router = try app.make(Router.self)
     router.get("sparql") { (req) in
