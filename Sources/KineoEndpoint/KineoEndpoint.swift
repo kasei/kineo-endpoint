@@ -16,7 +16,7 @@ public struct EndpointError : Error {
     var message: String
 }
 
-func parseAccept(_ value: String) -> [(String, Double)] {
+public func parseAccept(_ value: String) -> [(String, Double)] {
     var accept = [(String, Double)]()
     let items = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
     for i in items {
@@ -49,10 +49,12 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
     
     var resp = HTTPResponse(status: .ok)
     
-    if let mtime = try e.effectiveVersion(matching: query) {
-        let date = getDateString(seconds: mtime)
-        resp.headers.add(name: "Last-Modified", value: "\(date)")
-    }
+    do {
+        if let mtime = try e.effectiveVersion(matching: query) {
+            let date = getDateString(seconds: mtime)
+            resp.headers.add(name: "Last-Modified", value: "\(date)")
+        }
+    } catch QueryError.evaluationError {}
     
     let results = try e.evaluate(query: query)
     
@@ -135,7 +137,7 @@ private func serialize(serviceDescription sd: ServiceDescription, for components
     return resp
 }
 
-private func get<D: PageDatabase>(req : Request, database: D, useLanguageConneg language: Bool) throws -> HTTPResponse {
+private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPResponse {
     do {
         let u = req.http.url
         guard let components = URLComponents(string: u.absoluteString) else { throw EndpointError(status: .badRequest, message: "Failed to access URL components") }
@@ -147,20 +149,11 @@ private func get<D: PageDatabase>(req : Request, database: D, useLanguageConneg 
             let query = try p.parseQuery()
             
             let accept = req.http.headers["Accept"]
-            if language, let header = req.http.headers["Accept-Language"].first {
-                let acceptLanguages = parseAccept(header)
-                let store = try LanguagePageQuadStore(database: database, acceptLanguages: acceptLanguages)
-                let ds = try dataset(from: components, for: store)
-                return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-            } else {
-                let store = try PageQuadStore(database: database)
-                let ds = try dataset(from: components, for: store)
-                print("Evaluating query: \(query.serialize())")
-                return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-            }
+            
+            let ds = try dataset(from: components, for: store)
+            return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
         } else {
             do {
-                let store = try PageQuadStore(database: database)
                 let ds = try dataset(from: components, for: store)
                 let e = SimpleQueryEvaluator(store: store, dataset: ds, verbose: false)
                 let features : [String] = e.supportedFeatures.map { $0.rawValue }
@@ -188,12 +181,13 @@ private func get<D: PageDatabase>(req : Request, database: D, useLanguageConneg 
     }
 }
 
-public func endpointApplication<D: PageDatabase>(for database: D, useLanguageConneg language: Bool = false, services: Services? = nil) throws -> Application {
+public func endpointApplication<Q: QuadStoreProtocol>(services: Services? = nil, constructQuadStore: @escaping (Request) throws -> Q) throws -> Application {
     let services = services ?? Services.default()
     let app = try Application(services: services)
     let router = try app.make(Router.self)
-    router.get("sparql") { (req) in
-        return try get(req: req, database: database, useLanguageConneg: language)
+    router.get("sparql") { (req) -> HTTPResponse in
+        let store = try constructQuadStore(req)
+        return try get(req: req, store: store)
     }
     
     router.post("sparql") { (req) -> HTTPResponse in
@@ -204,37 +198,22 @@ public func endpointApplication<D: PageDatabase>(for database: D, useLanguageCon
             let ct = req.http.headers["Content-Type"].first
             let accept = req.http.headers["Accept"]
             
+            let store = try constructQuadStore(req)
             switch ct {
             case .none, .some("application/sparql-query"):
                 guard let sparqlData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No query supplied") }
                 guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
                 let query = try p.parseQuery()
-                if language, let header = req.http.headers["Accept-Language"].first {
-                    let acceptLanguages = parseAccept(header)
-                    let store = try LanguagePageQuadStore(database: database, acceptLanguages: acceptLanguages)
-                    let ds = try dataset(from: components, for: store)
-                    return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-                } else {
-                    let store = try PageQuadStore(database: database)
-                    let ds = try dataset(from: components, for: store)
-                    return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-                }
+                let ds = try dataset(from: components, for: store)
+                return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
             case .some("application/x-www-form-urlencoded"):
                 guard let formData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No form data supplied") }
                 let q = try URLEncodedFormDecoder().decode(ProtocolRequest.self, from: formData)
                 guard let sparqlData = q.query.data(using: .utf8) else { throw EndpointError(status: .badRequest, message: "No query supplied") }
                 guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
                 let query = try p.parseQuery()
-                if language, let header = req.http.headers["Accept-Language"].first {
-                    let acceptLanguages = parseAccept(header)
-                    let store = try LanguagePageQuadStore(database: database, acceptLanguages: acceptLanguages)
-                    let ds = try q.dataset ?? dataset(from: components, for: store) // TOOD: access dataset IRIs from POST body
-                    return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-                } else {
-                    let store = try PageQuadStore(database: database)
-                    let ds = try q.dataset ?? dataset(from: components, for: store) // TOOD: access dataset IRIs from POST body
-                    return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-                }
+                let ds = try q.dataset ?? dataset(from: components, for: store) // TOOD: access dataset IRIs from POST body
+                return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
             case .some(let c):
                 throw EndpointError(status: .badRequest, message: "Unrecognized Content-Type: \(c)")
             }
@@ -249,4 +228,3 @@ public func endpointApplication<D: PageDatabase>(for database: D, useLanguageCon
     }
     return app
 }
-
