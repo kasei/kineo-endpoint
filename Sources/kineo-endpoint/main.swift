@@ -38,7 +38,6 @@ func parse<Q : MutableQuadStoreProtocol>(_ store: Q, files: [String], graph defa
             quads.append(q)
         }
         
-        print("Loading RDF: \(filename)")
         try store.load(version: version, quads: quads)
         print("Store count: \(store.count)")
     }
@@ -51,9 +50,11 @@ func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStore
     let startSecond = getCurrentDateSeconds()
     if case let .loadFiles(defaultGraphs, namedGraphs) = config.initialize {
         let defaultGraph = Term(iri: "tag:kasei.us,2018:default-graph")
+        print("Loading RDF files into default graph: \(defaultGraphs)")
         count += try parse(store, files: defaultGraphs, graph: defaultGraph, startTime: startSecond)
         
         for (graph, file) in namedGraphs {
+            print("Loading RDF file into named graph: \(file)")
             count = try parse(store, files: [file], graph: graph, startTime: startSecond)
         }
     }
