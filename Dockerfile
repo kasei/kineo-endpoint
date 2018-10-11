@@ -19,5 +19,5 @@ EXPOSE 8080
 VOLUME ["/data"]
 ENV PATH="/work:/work/.build/debug:${PATH}"
 
-ENTRYPOINT ["/work/entrypoint.sh"]
+ENTRYPOINT ["kineo-endpoint"]
 CMD ["kineo-endpoint"]
