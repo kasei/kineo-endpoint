@@ -24,10 +24,10 @@ public func parseAccept(_ value: String) -> [(String, Double)] {
         if pair.count == 1 {
             accept.append((String(pair[0]), 1.0))
         } else if pair.count == 2 {
-            if let d = Double(pair[1]) {
+            if let d = Double(pair[1].dropFirst(2)) { // drop the q= prefix
                 accept.append((String(pair[0]), d))
             } else {
-                accept.append((String(pair[0]), 1.0))
+                accept.append((String(pair[0]), 0.99)) // make failed-parse items slightly less preferable than items without a q-value
             }
         }
     }
