@@ -10,6 +10,9 @@ import KineoEndpoint
 import SPARQLSyntax
 import Kineo
 import Vapor
+#if os(macOS)
+import os.signpost
+#endif
 
 /**
  Parse the supplied RDF files and load the resulting RDF triples into the database's
@@ -67,6 +70,7 @@ guard CommandLine.arguments.count > 1 else {
     exit(1)
 }
 
+print("Command-line arguments: \(CommandLine.arguments)")
 let config = try QuadStoreConfiguration(arguments: &CommandLine.arguments)
 
 var features = [String]()
@@ -89,19 +93,48 @@ let hostname = "0.0.0.0"
 let port = 8080
 services.register(NIOServerConfig.default(hostname: hostname, port: port))
 
+#if os(macOS)
+var log: OSLog!
+if #available(OSX 10.14, *) {
+    log = OSLog(subsystem: "us.kasei.kineo.endpoint", category: .pointsOfInterest)
+} else if #available(OSX 10.12, *) {
+    log = .disabled
+}
+#endif
+
 if case .memoryDatabase = config.type {
     let store = MemoryQuadStore()
     try load(store: store, configuration: config)
     if config.languageAware {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+        os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
         let app = try endpointApplication(services: services) { (req) throws -> LanguageMemoryQuadStore in
             let header = req.http.headers["Accept-Language"].first ?? "*"
             let acceptLanguages = parseAccept(header)
             let lstore = try LanguageMemoryQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
             return lstore
         }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+        os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
         try app.run()
     } else {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+        os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
         let app = try endpointApplication(services: services) { (_) in return store }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+        os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
         try app.run()
     }
 } else {
@@ -115,6 +148,11 @@ if case .memoryDatabase = config.type {
         exit(1)
     }
     if config.languageAware {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+        os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
         let app = try endpointApplication(services: services) { (req) throws -> LanguagePageQuadStore<FilePageDatabase> in
             let header = req.http.headers["Accept-Language"].first ?? "*"
             let acceptLanguages = parseAccept(header)
@@ -122,11 +160,26 @@ if case .memoryDatabase = config.type {
             try load(store: store, configuration: config)
             return store
         }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+        os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
         try app.run()
     } else {
         let store = try PageQuadStore(database: database)
         try load(store: store, configuration: config)
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
         let app = try endpointApplication(services: services) { (_) in return store }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
         try app.run()
     }
 }

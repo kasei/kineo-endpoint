@@ -2,6 +2,9 @@ import Foundation
 import Kineo
 import SPARQLSyntax
 import Vapor
+#if os(macOS)
+import os.signpost
+#endif
 
 public struct ServiceDescription {
     public var supportedLanguages: [QueryLanguage]
@@ -181,43 +184,73 @@ private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPRe
     }
 }
 
+func logQuery<T>(_ object: AnyObject, _ handler: () throws -> T) rethrows -> T {
+    #if os(macOS)
+    if #available(OSX 10.14, *) {
+        let startTime = getCurrentTime()
+        let log = OSLog(subsystem: "us.kasei.kineo.endpoint", category: .pointsOfInterest)
+        let signpostID = OSSignpostID(log: log, object: object)
+        do {
+            os_signpost(.begin, log: log, name: "Query Evaluation", signpostID: signpostID, "Begin")
+            let r = try handler()
+            let endTime = getCurrentTime()
+            let elapsed = endTime - startTime
+            os_signpost(.end, log: log, name: "Query Evaluation", signpostID: signpostID, "Finished in %{public}lfs", elapsed)
+            return r
+        } catch let error {
+            let endTime = getCurrentTime()
+            let elapsed = endTime - startTime
+            os_signpost(.end, log: log, name: "Query Evaluation", signpostID: signpostID, "Failed in %{public}lfs: %@", elapsed, String(describing: error))
+            throw error
+        }
+    } else {
+        return try handler()
+    }
+    #else
+    return try handler()
+    #endif
+}
+
 public func endpointApplication<Q: QuadStoreProtocol>(services: Services? = nil, constructQuadStore: @escaping (Request) throws -> Q) throws -> Application {
     let services = services ?? Services.default()
     let app = try Application(services: services)
     let router = try app.make(Router.self)
     router.get("sparql") { (req) -> HTTPResponse in
-        let store = try constructQuadStore(req)
-        return try get(req: req, store: store)
+        return try logQuery(req) {
+            let store = try constructQuadStore(req)
+            return try get(req: req, store: store)
+        }
     }
     
     router.post("sparql") { (req) -> HTTPResponse in
         do {
-            let u = req.http.url
-            guard let components = URLComponents(string: u.absoluteString) else { throw EndpointError(status: .badRequest, message: "Failed to access URL components") }
-            
-            let ct = req.http.headers["Content-Type"].first
-            let accept = req.http.headers["Accept"]
-            
-            let store = try constructQuadStore(req)
-            switch ct {
-            case .none, .some("application/sparql-query"):
-                guard let sparqlData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No query supplied") }
-                guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
-                let query = try p.parseQuery()
-                let ds = try dataset(from: components, for: store)
-                return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-            case .some("application/x-www-form-urlencoded"):
-                guard let formData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No form data supplied") }
-                let q = try URLEncodedFormDecoder().decode(ProtocolRequest.self, from: formData)
-                guard let sparqlData = q.query.data(using: .utf8) else { throw EndpointError(status: .badRequest, message: "No query supplied") }
-                guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
-                let query = try p.parseQuery()
-                let ds = try q.dataset ?? dataset(from: components, for: store) // TOOD: access dataset IRIs from POST body
-                return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
-            case .some(let c):
-                throw EndpointError(status: .badRequest, message: "Unrecognized Content-Type: \(c)")
+            return try logQuery(req) {
+                let u = req.http.url
+                guard let components = URLComponents(string: u.absoluteString) else { throw EndpointError(status: .badRequest, message: "Failed to access URL components") }
+                
+                let ct = req.http.headers["Content-Type"].first
+                let accept = req.http.headers["Accept"]
+                
+                let store = try constructQuadStore(req)
+                switch ct {
+                case .none, .some("application/sparql-query"):
+                    guard let sparqlData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No query supplied") }
+                    guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
+                    let query = try p.parseQuery()
+                    let ds = try dataset(from: components, for: store)
+                    return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
+                case .some("application/x-www-form-urlencoded"):
+                    guard let formData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No form data supplied") }
+                    let q = try URLEncodedFormDecoder().decode(ProtocolRequest.self, from: formData)
+                    guard let sparqlData = q.query.data(using: .utf8) else { throw EndpointError(status: .badRequest, message: "No query supplied") }
+                    guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
+                    let query = try p.parseQuery()
+                    let ds = try q.dataset ?? dataset(from: components, for: store) // TOOD: access dataset IRIs from POST body
+                    return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
+                case .some(let c):
+                    throw EndpointError(status: .badRequest, message: "Unrecognized Content-Type: \(c)")
+                }
             }
-            
         } catch let e {
             if let err = e as? EndpointError {
                 return HTTPResponse(status: err.status, body: err.message)
