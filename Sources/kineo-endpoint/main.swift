@@ -114,7 +114,7 @@ if case .memoryDatabase = config.type {
         let app = try endpointApplication(services: services) { (req) throws -> LanguageMemoryQuadStore in
             let header = req.http.headers["Accept-Language"].first ?? "*"
             let acceptLanguages = parseAccept(header)
-            let lstore = try LanguageMemoryQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
+            let lstore = LanguageMemoryQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
             return lstore
         }
         #if os(macOS)
