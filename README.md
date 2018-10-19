@@ -8,34 +8,34 @@
 % swift build -c release
 ```
 
-### Load data
+### Creating an in-memory endpoint
 
-Create a database file (`geo.db`) and load an N-Triples or Turtle file:
-
-```
-% ./.build/release/kineo-create-db geo.db dbpedia-geo.nt
-```
-
-### Start the Endpoint
+Create an in-memory endpoint with data loaded into the default graph:
 
 ```
-./.build/release/kineo-endpoint geo.db
+% ./.build/release/kineo-endpoint -m --default-graph=dbpedia-geo.nt &
+```
+
+### Creating a persistent database endpoint
+
+Alternatively, a persistent database file (`geo.db`) can be created and loaded
+with N-Triples or Turtle files offline:
+
+```
+% ./.build/release/kineo-create-db geo.db --default-graph=dbpedia-geo.nt
+```
+
+After loading data, an endpoint can be started using this persistent database:
+
+```
+./.build/release/kineo-endpoint -f geo.db &
 ```
 
 ### Query
 
-Querying of the data can be done using SPARQL:
+Querying of the data can be done using SPARQL protocol:
 
 ```
-% curl --data 'query=PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#> SELECT ?s ?lat WHERE { ?s geo:lat ?lat ; geo:long ?long } ORDER BY ?s LIMIT 25' http://localhost:8080/sparql
-```
-
-### SPARQL Endpoint
-
-Finally, a SPARQL endpoint can be run, allowing SPARQL Protocol clients to access the data:
-
-```
-% ./.build/release/kineo-endpoint geo.db &
 % curl -s -H "Accept: application/sparql-results+json" -H "Content-Type: application/sparql-query" --data 'PREFIX geo: <http://www.w3.org/2003/01/geo/wgs84_pos#> SELECT ?s ?lat ?long WHERE { ?s geo:lat ?lat ; geo:long ?long } LIMIT 1' 'http://localhost:8080/sparql' | jq .
 {
   "head": {

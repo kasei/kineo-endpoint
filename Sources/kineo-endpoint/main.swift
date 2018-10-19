@@ -66,7 +66,40 @@ func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStore
 
 let pageSize = 8192
 guard CommandLine.arguments.count > 1 else {
-    warn("No database filename given.")
+    guard let pname = CommandLine.arguments.first else { fatalError("Missing command name") }
+    print("""
+        Usage:
+        
+            \(pname) -m             [ARGS] [DATASET-DEFINITION]
+            \(pname) -f DATABASE.db [ARGS] [DATASET-DEFINITION]
+
+        RDF data may be loaded at startup to construct the dataset using:
+
+        Options:
+        
+        -l, -language
+                Enable language-aware processing. This will use the Accept-Language
+                request header to return only localized data that is in a language
+                acceptable to the client.
+        
+        -m, --memory
+                Use (non-persistent) in-memory storage for the endpoint data
+        
+        -f, --file=DATABASE
+                Use the named database file as persistent storage for the endpoint
+                data.
+
+        Dataset Definition:
+        
+        -d, --default-graph=FILENAME
+                Parse RDF from the named file into the default graph. This
+                option may be used repeatedly to parse multiple files into
+                the default graph.
+        
+        -n, --named-graph=FILENAME
+                Parse RDF from the named file into a named graph.
+
+        """)
     exit(1)
 }
 
