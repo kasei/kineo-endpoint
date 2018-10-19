@@ -104,25 +104,22 @@ func printSummary<D : PageDatabase>(of database: D) throws {
 
 var verbose = true
 let argscount = CommandLine.arguments.count
-var args = PeekableIterator(generator: CommandLine.arguments.makeIterator())
-guard let pname = args.next() else { fatalError("Missing command name") }
+let config = try QuadStoreConfiguration(arguments: &CommandLine.arguments)
 var pageSize = 8192
 guard argscount >= 2 else {
-    print("Usage: \(pname) [-v] database.db [-g GRAPH-IRI] rdf.nt ...")
-    print("")
+    guard let pname = CommandLine.arguments.first else { fatalError("Missing command name") }
+    print("""
+    Usage:             \(pname) -f DATABASE.db -d default.rdf -n named.rdf ...
+    
+    """)
     exit(1)
 }
 
-if let next = args.peek(), next == "-v" {
-    _ = args.next()
-    verbose = true
-}
-
-guard let filename = args.next() else { fatalError("Missing filename") }
-guard filename != "" else {
-    warn("No database filename found in CommandLine.arguments: \(CommandLine.arguments)")
+guard case .filePageDatabase(let filename) = config.type else {
+    warn("Database type must be a file database.")
     exit(1)
 }
+
 guard let database = FilePageDatabase(filename, size: pageSize) else { warn("Failed to open database file '\(filename)'"); exit(1) }
 let startTime = getCurrentTime()
 let startSecond = getCurrentDateSeconds()
@@ -130,14 +127,13 @@ var count = 0
 
 try setup(database, version: Version(startSecond))
 do {
-    var graph: Term? = nil
-    if let next = args.peek(), next == "-g" {
-        _ = args.next()
-        guard let iri = args.next() else { fatalError("No IRI value given after -g") }
-        graph = Term(value: iri, type: .iri)
+    if case let .loadFiles(defaultFiles, namedFiles) = config.initialize {
+        count += try parse(database, files: defaultFiles, startTime: startSecond, graph: nil)
+        
+        for (graph, file) in namedFiles {
+            count += try parse(database, files: [file], startTime: startSecond, graph: graph)
+        }
     }
-    
-    count = try parse(database, files: args.elements(), startTime: startSecond, graph: graph)
 } catch let e {
     warn("*** Failed to load data: \(e)")
 }

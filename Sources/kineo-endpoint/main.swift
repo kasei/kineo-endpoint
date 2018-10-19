@@ -103,7 +103,6 @@ guard CommandLine.arguments.count > 1 else {
     exit(1)
 }
 
-print("Command-line arguments: \(CommandLine.arguments)")
 let config = try QuadStoreConfiguration(arguments: &CommandLine.arguments)
 
 var features = [String]()
