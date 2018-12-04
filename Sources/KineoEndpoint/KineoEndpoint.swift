@@ -6,6 +6,10 @@ import Vapor
 import os.signpost
 #endif
 
+public enum EndpointSetupError: Error {
+    case parseError(String)
+}
+
 public struct ServiceDescription {
     public var supportedLanguages: [QueryLanguage]
     public var resultFormats: [SPARQLContentNegotiator.ResultFormat]

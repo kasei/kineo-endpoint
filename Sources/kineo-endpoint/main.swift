@@ -10,6 +10,7 @@ import KineoEndpoint
 import SPARQLSyntax
 import Kineo
 import Vapor
+import HDT
 #if os(macOS)
 import os.signpost
 #endif
@@ -34,9 +35,12 @@ func parse<Q : MutableQuadStoreProtocol>(_ store: Q, files: [String], graph defa
         #endif
         let graph   = defaultGraphTerm ?? Term(value: path, type: .iri)
         
-        let parser = RDFParser()
+        guard let p = RDFSerializationConfiguration.shared.parserFor(filename: filename) else {
+            throw KineoEndpoint.EndpointSetupError.parseError("Failed to determine appropriate parser for file: \(filename)")
+        }
+        
         var quads = [Quad]()
-        count = try parser.parse(file: filename, base: graph.value) { (s, p, o) in
+        count = try p.parser.parseFile(filename, mediaType: p.mediaType, base: graph.value) { (s, p, o) in
             let q = Quad(subject: s, predicate: p, object: o, graph: graph)
             quads.append(q)
         }
@@ -53,11 +57,11 @@ func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStore
     let startSecond = getCurrentDateSeconds()
     if case let .loadFiles(defaultGraphs, namedGraphs) = config.initialize {
         let defaultGraph = Term(iri: "tag:kasei.us,2018:default-graph")
-        print("Loading RDF files into default graph: \(defaultGraphs)")
+        print("Loading RDF files into default graph (\(defaultGraph)): \(defaultGraphs)")
         count += try parse(store, files: defaultGraphs, graph: defaultGraph, startTime: startSecond)
         
         for (graph, file) in namedGraphs {
-            print("Loading RDF file into named graph: \(file)")
+            print("Loading RDF file into named graph \(graph): \(file)")
             count = try parse(store, files: [file], graph: graph, startTime: startSecond)
         }
     }
@@ -65,6 +69,7 @@ func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStore
 }
 
 let pageSize = 8192
+RDFSerializationConfiguration.shared.registerParser(HDTRDFParser.self, withType: "application/hdt", extensions: [".hdt"], mediaTypes: [])
 guard CommandLine.arguments.count > 1 else {
     guard let pname = CommandLine.arguments.first else { fatalError("Missing command name") }
     print("""
@@ -169,12 +174,7 @@ if case .memoryDatabase = config.type {
         #endif
         try app.run()
     }
-} else {
-    guard case .filePageDatabase(let filename) = config.type else {
-        warn("No database filename available")
-        exit(1)
-    }
-    
+} else if case .filePageDatabase(let filename) = config.type {
     guard let database = FilePageDatabase(filename, size: pageSize) else {
         warn("Failed to open database file '\(filename)'")
         exit(1)
@@ -214,4 +214,7 @@ if case .memoryDatabase = config.type {
         #endif
         try app.run()
     }
+} else {
+    warn("No database filename available")
+    exit(1)
 }

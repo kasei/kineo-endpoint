@@ -9,6 +9,7 @@
 import Foundation
 import SPARQLSyntax
 import Kineo
+import KineoEndpoint
 
 /**
  If necessary, create a new quadstore in the supplied database.
@@ -39,7 +40,7 @@ func setup<D : PageDatabase>(_ database: D, version: Version) throws {
 func parse<D : PageDatabase>(_ database: D, files: [String], startTime: UInt64, graph defaultGraphTerm: Term? = nil) throws -> Int {
     var count   = 0
     let version = Version(startTime)
-    try database.update(version: version) { (m) in
+    try database.update(version: version) { (m) throws in
         do {
             for filename in files {
                 #if os (OSX)
@@ -49,10 +50,13 @@ func parse<D : PageDatabase>(_ database: D, files: [String], startTime: UInt64, 
                 #endif
                 let graph   = defaultGraphTerm ?? Term(value: path, type: .iri)
 
-                let parser = RDFParser()
+                guard let p = RDFSerializationConfiguration.shared.parserFor(filename: filename) else {
+                    throw KineoEndpoint.EndpointSetupError.parseError("Failed to determine appropriate parser for file: \(filename)")
+                }
+                
                 var quads = [Quad]()
                 print("Parsing RDF...")
-                count = try parser.parse(file: filename, base: graph.value) { (s, p, o) in
+                count = try p.parser.parseFile(filename, mediaType: p.mediaType, base: graph.value) { (s, p, o) in
                     let q = Quad(subject: s, predicate: p, object: o, graph: graph)
                     quads.append(q)
                 }
