@@ -76,7 +76,7 @@ guard CommandLine.arguments.count > 1 else {
         Usage:
         
             \(pname) -m             [ARGS] [DATASET-DEFINITION]
-            \(pname) -f DATABASE.db [ARGS] [DATASET-DEFINITION]
+            \(pname) -s DATABASE.db [ARGS] [DATASET-DEFINITION]
 
         RDF data may be loaded at startup to construct the dataset using:
 
@@ -90,7 +90,7 @@ guard CommandLine.arguments.count > 1 else {
         -m, --memory
                 Use (non-persistent) in-memory storage for the endpoint data
         
-        -f, --file=DATABASE
+        -s DATABASE
                 Use the named database file as persistent storage for the endpoint
                 data.
 
@@ -139,42 +139,8 @@ if #available(OSX 10.14, *) {
 }
 #endif
 
-if case .memoryDatabase = config.type {
-    let store = MemoryQuadStore()
-    try load(store: store, configuration: config)
-    if config.languageAware {
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-        os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
-        }
-        #endif
-        let app = try endpointApplication(services: services) { (req) throws -> LanguageMemoryQuadStore in
-            let header = req.http.headers["Accept-Language"].first ?? "*"
-            let acceptLanguages = parseAccept(header)
-            let lstore = LanguageMemoryQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
-            return lstore
-        }
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-        os_signpost(.event, log: log, name: "Endpoint", "Startup")
-        }
-        #endif
-        try app.run()
-    } else {
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-        os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
-        }
-        #endif
-        let app = try endpointApplication(services: services) { (_) in return store }
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-        os_signpost(.event, log: log, name: "Endpoint", "Startup")
-        }
-        #endif
-        try app.run()
-    }
-} else if case .filePageDatabase(let filename) = config.type {
+switch config.type {
+case .filePageDatabase(let filename):
     guard let database = FilePageDatabase(filename, size: pageSize) else {
         warn("Failed to open database file '\(filename)'")
         exit(1)
@@ -182,7 +148,7 @@ if case .memoryDatabase = config.type {
     if config.languageAware {
         #if os(macOS)
         if #available(OSX 10.14, *) {
-        os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
         }
         #endif
         let app = try endpointApplication(services: services) { (req) throws -> LanguagePageQuadStore<FilePageDatabase> in
@@ -194,7 +160,7 @@ if case .memoryDatabase = config.type {
         }
         #if os(macOS)
         if #available(OSX 10.14, *) {
-        os_signpost(.event, log: log, name: "Endpoint", "Startup")
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
         }
         #endif
         try app.run()
@@ -214,7 +180,112 @@ if case .memoryDatabase = config.type {
         #endif
         try app.run()
     }
-} else {
-    warn("No database filename available")
-    exit(1)
+case .sqliteFileDatabase(let filename):
+    let fileManager = FileManager.default
+    let initialize = !fileManager.fileExists(atPath: filename)
+    let store = try SQLiteQuadStore(filename: filename, initialize: initialize)
+    if config.languageAware {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
+        try load(store: store, configuration: config)
+        let app = try endpointApplication(services: services) { (req) throws -> SQLiteLanguageQuadStore in
+            let header = req.http.headers["Accept-Language"].first ?? "*"
+            let acceptLanguages = parseAccept(header)
+            let lstore = SQLiteLanguageQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
+            return lstore
+        }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
+        try app.run()
+    } else {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
+        try load(store: store, configuration: config)
+        let app = try endpointApplication(services: services) { (_) in return store }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
+        try app.run()
+    }
+case .memoryDatabase:
+    let store = MemoryQuadStore()
+    try load(store: store, configuration: config)
+    if config.languageAware {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
+        let app = try endpointApplication(services: services) { (req) throws -> LanguageMemoryQuadStore in
+            let header = req.http.headers["Accept-Language"].first ?? "*"
+            let acceptLanguages = parseAccept(header)
+            let lstore = LanguageMemoryQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
+            return lstore
+        }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
+        try app.run()
+    } else {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
+        let app = try endpointApplication(services: services) { (_) in return store }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
+        try app.run()
+    }
+case .sqliteMemoryDatabase:
+    let store = try SQLiteQuadStore()
+    try load(store: store, configuration: config)
+    if config.languageAware {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
+        let app = try endpointApplication(services: services) { (req) throws -> SQLiteLanguageQuadStore in
+            let header = req.http.headers["Accept-Language"].first ?? "*"
+            let acceptLanguages = parseAccept(header)
+            let lstore = SQLiteLanguageQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
+            return lstore
+        }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
+        try app.run()
+    } else {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
+        let app = try endpointApplication(services: services) { (_) in return store }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
+        try app.run()
+    }
 }
