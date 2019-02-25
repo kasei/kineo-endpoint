@@ -7,7 +7,7 @@ let package = Package(
 		.library(name: "KineoEndpoint", targets: ["KineoEndpoint"]),
 	],    
     dependencies: [
-        .package(url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.57")),
+        .package(url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.58")),
         .package(url: "https://github.com/kasei/swift-hdt.git", .upToNextMinor(from: "0.0.4")),
         .package(url: "https://github.com/vapor/vapor.git", .upToNextMinor(from: "3.2.0")),
     ],
