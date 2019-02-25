@@ -113,7 +113,7 @@ let config = try QuadStoreConfiguration(arguments: &CommandLine.arguments)
 var features = [String]()
 
 switch config.type {
-case .memoryDatabase:
+case .memoryDatabase, .sqliteMemoryDatabase:
     features.append("in-memory")
 default:
     features.append("disk-based")
