@@ -13,7 +13,7 @@
 Create an in-memory endpoint with data loaded into the default graph:
 
 ```
-% ./.build/release/kineo-endpoint -m --default-graph=dbpedia-geo.nt &
+% ./.build/release/kineo-endpoint -m --default-graph=examples/geo-data/geo.ttl &
 ```
 
 ### Creating a persistent database endpoint
@@ -22,13 +22,13 @@ Alternatively, a persistent database file (`geo.db`) can be created and loaded
 with N-Triples or Turtle files offline:
 
 ```
-% ./.build/release/kineo-create-db -f geo.db --default-graph=dbpedia-geo.nt
+% ./.build/release/kineo-create-db -s geo.db --default-graph=examples/geo-data/geo.ttl
 ```
 
 After loading data, an endpoint can be started using this persistent database:
 
 ```
-./.build/release/kineo-endpoint -f geo.db &
+./.build/release/kineo-endpoint -s geo.db &
 ```
 
 ### Query

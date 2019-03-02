@@ -37,37 +37,45 @@ func setup<D : PageDatabase>(_ database: D, version: Version) throws {
  - parameter startTime: The timestamp to use as the database transaction version number.
  - parameter graph: The graph into which parsed triples should be load.
  */
-func parse<D : PageDatabase>(_ database: D, files: [String], startTime: UInt64, graph defaultGraphTerm: Term? = nil) throws -> Int {
+func parse<Q : MutableQuadStoreProtocol>(_ store: Q, files: [String], graph defaultGraphTerm: Term? = nil, startTime: UInt64 = 0) throws -> Int {
     var count   = 0
     let version = Version(startTime)
-    try database.update(version: version) { (m) throws in
-        do {
-            for filename in files {
-                #if os (OSX)
-                    guard let path = NSURL(fileURLWithPath: filename).absoluteString else { throw DatabaseError.DataError("Not a valid graph path: \(filename)") }
-                #else
-                    let path = NSURL(fileURLWithPath: filename).absoluteString
-                #endif
-                let graph   = defaultGraphTerm ?? Term(value: path, type: .iri)
+    for filename in files {
+        #if os (OSX)
+        guard let path = NSURL(fileURLWithPath: filename).absoluteString else { throw DatabaseError.DataError("Not a valid graph path: \(filename)") }
+        #else
+        let path = NSURL(fileURLWithPath: filename).absoluteString
+        #endif
+        let graph   = defaultGraphTerm ?? Term(value: path, type: .iri)
+        
+        guard let p = RDFSerializationConfiguration.shared.parserFor(filename: filename) else {
+            throw KineoEndpoint.EndpointSetupError.parseError("Failed to determine appropriate parser for file: \(filename)")
+        }
+        
+        var quads = [Quad]()
+        count = try p.parser.parseFile(filename, mediaType: p.mediaType, base: graph.value) { (s, p, o) in
+            let q = Quad(subject: s, predicate: p, object: o, graph: graph)
+            quads.append(q)
+        }
+        
+        try store.load(version: version, quads: quads)
+        print("Store count: \(store.count)")
+    }
+    return count
+}
 
-                guard let p = RDFSerializationConfiguration.shared.parserFor(filename: filename) else {
-                    throw KineoEndpoint.EndpointSetupError.parseError("Failed to determine appropriate parser for file: \(filename)")
-                }
-                
-                var quads = [Quad]()
-                print("Parsing RDF...")
-                count = try p.parser.parseFile(filename, mediaType: p.mediaType, base: graph.value) { (s, p, o) in
-                    let q = Quad(subject: s, predicate: p, object: o, graph: graph)
-                    quads.append(q)
-                }
-
-                print("Loading RDF...")
-                let store = try MediatedPageQuadStore.create(mediator: m)
-                try store.load(quads: quads)
-            }
-        } catch let e {
-            warn("*** Failed during load of RDF (\(count) triples handled); \(e)")
-            throw DatabaseUpdateError.rollback
+@discardableResult
+func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStoreConfiguration) throws -> Int {
+    var count = 0
+    let startSecond = getCurrentDateSeconds()
+    if case let .loadFiles(defaultGraphs, namedGraphs) = config.initialize {
+        let defaultGraph = Term(iri: "tag:kasei.us,2018:default-graph")
+        print("Loading RDF files into default graph (\(defaultGraph)): \(defaultGraphs)")
+        count += try parse(store, files: defaultGraphs, graph: defaultGraph, startTime: startSecond)
+        
+        for (graph, file) in namedGraphs {
+            print("Loading RDF file into named graph \(graph): \(file)")
+            count = try parse(store, files: [file], graph: graph, startTime: startSecond)
         }
     }
     return count
@@ -106,40 +114,47 @@ func printSummary<D : PageDatabase>(of database: D) throws {
     
 }
 
+let pageSize = 8192
 var verbose = true
 let argscount = CommandLine.arguments.count
 let config = try QuadStoreConfiguration(arguments: &CommandLine.arguments)
-var pageSize = 8192
-guard argscount >= 2 else {
-    guard let pname = CommandLine.arguments.first else { fatalError("Missing command name") }
-    print("""
-    Usage:             \(pname) -f DATABASE.db -d default.rdf -n named.rdf ...
-    
-    """)
-    exit(1)
+
+var features = [String]()
+
+switch config.type {
+case .memoryDatabase, .sqliteMemoryDatabase:
+    features.append("in-memory")
+default:
+    features.append("disk-based")
 }
 
-guard case .filePageDatabase(let filename) = config.type else {
-    warn("Database type must be a file database.")
-    exit(1)
+if config.languageAware {
+    features.append("language-aware")
 }
 
-guard let database = FilePageDatabase(filename, size: pageSize) else { warn("Failed to open database file '\(filename)'"); exit(1) }
+print("Constructing \(features.joined(separator: ", ")) quadstore")
+
 let startTime = getCurrentTime()
 let startSecond = getCurrentDateSeconds()
 var count = 0
 
-try setup(database, version: Version(startSecond))
-do {
-    if case let .loadFiles(defaultFiles, namedFiles) = config.initialize {
-        count += try parse(database, files: defaultFiles, startTime: startSecond, graph: nil)
-        
-        for (graph, file) in namedFiles {
-            count += try parse(database, files: [file], startTime: startSecond, graph: graph)
-        }
+switch config.type {
+case .filePageDatabase(let filename):
+    guard let database = FilePageDatabase(filename, size: pageSize) else {
+        warn("Failed to open database file '\(filename)'")
+        exit(1)
     }
-} catch let e {
-    warn("*** Failed to load data: \(e)")
+    
+    let store = try PageQuadStore(database: database)
+    count += try load(store: store, configuration: config)
+case .sqliteFileDatabase(let filename):
+    let fileManager = FileManager.default
+    let initialize = !fileManager.fileExists(atPath: filename)
+    let store = try SQLiteQuadStore(filename: filename, initialize: initialize)
+    count += try load(store: store, configuration: config)
+case .memoryDatabase, .sqliteMemoryDatabase:
+    warn("Database type must be a disk-based database.")
+    exit(1)
 }
 
 let endTime = getCurrentTime()
