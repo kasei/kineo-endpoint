@@ -52,14 +52,17 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
     let verbose = false
     let accept = parseAccept(acceptHeader.first ?? "*/*").map { $0.0 }
     
-    let e = SimpleQueryEvaluator(store: store, dataset: dataset, verbose: verbose)
+    let e       = QueryPlanEvaluator(store: store, dataset: dataset)
     
     var resp = HTTPResponse(status: .ok)
     
     do {
+        let e = SimpleQueryEvaluator(store: store, dataset: dataset, verbose: verbose)
         if let mtime = try e.effectiveVersion(matching: query) {
             let date = getDateString(seconds: mtime)
             resp.headers.add(name: "Last-Modified", value: "\(date)")
+        } else {
+            print("No Last-Modified date could be computed")
         }
     } catch QueryError.evaluationError {}
     
@@ -151,6 +154,7 @@ private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPRe
         let queryItems = components.queryItems ?? []
         let queries = queryItems.filter { $0.name == "query" }.compactMap { $0.value }
         if let sparql = queries.first {
+            // Run a query
             guard let sparqlData = sparql.data(using: .utf8) else { throw EndpointError(status: .badRequest, message: "Failed to interpret SPARQL as utf-8") }
             guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
             let query = try p.parseQuery()
@@ -160,6 +164,7 @@ private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPRe
             let ds = try dataset(from: components, for: store)
             return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
         } else {
+            // Return a Service Description
             do {
                 let ds = try dataset(from: components, for: store)
                 let e = SimpleQueryEvaluator(store: store, dataset: ds, verbose: false)
