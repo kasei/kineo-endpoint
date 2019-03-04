@@ -68,8 +68,10 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
     
     let results = try e.evaluate(query: query)
     
-    let negotiator = SPARQLContentNegotiator()
-    let serializer = negotiator.negotiateSerializer(for: results, accept: accept)
+    let negotiator = SPARQLContentNegotiator.shared
+    guard let serializer = negotiator.negotiateSerializer(for: results, accept: accept) else {
+        throw EndpointError(status: .notAcceptable, message: "No appropriate serializer available for query results")
+    }
     resp.headers.replaceOrAdd(name: "Content-Type", value: serializer.canonicalMediaType)
     let data = try serializer.serialize(results)
     resp.body = HTTPBody(data: data)
@@ -169,7 +171,7 @@ private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPRe
                 let ds = try dataset(from: components, for: store)
                 let e = SimpleQueryEvaluator(store: store, dataset: ds, verbose: false)
                 let features : [String] = e.supportedFeatures.map { $0.rawValue }
-                let negotiator = SPARQLContentNegotiator()
+                let negotiator = SPARQLContentNegotiator.shared
                 let sd = ServiceDescription(
                     supportedLanguages: e.supportedLanguages,
                     resultFormats: negotiator.supportedSerializations,

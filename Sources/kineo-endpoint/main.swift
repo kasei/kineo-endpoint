@@ -139,6 +139,8 @@ if #available(OSX 10.14, *) {
 }
 #endif
 
+SPARQLContentNegotiator.shared.addSerializer(SPARQLHTMLSerializer<TermResult>())
+
 switch config.type {
 case .filePageDatabase(let filename):
     guard let database = FilePageDatabase(filename, size: pageSize) else {
