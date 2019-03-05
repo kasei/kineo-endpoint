@@ -18,27 +18,35 @@ public struct SPARQLHTMLSerializer<T: ResultProtocol> : SPARQLSerializable where
     typealias ResultType = T
     public let canonicalMediaType = "text/html"
     public var acceptableMediaTypes = ["text/html"]
-
+    public var htmlTemplate: String
+    
     public init() {
-    }
-
-    public func serialize<R: Sequence, T: Sequence>(_ results: QueryResult<R, T>) throws -> Data where R.Element == TermResult, T.Element == Triple {
-        let d = try _serialize(results)
-        let head = """
+        htmlTemplate = """
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="utf-8" />
             <title>Query Results</title>
+            <style type="text/css">
+                table { border: 1px solid #000; padding: 0; border-collapse: collapse; }
+                td, th { border: 1px solid #000; margin: 0; padding: 0 5px; }
+            </style>
         </head>
         <body>
-        
-        """
-        let tail = """
+        <h1>Query Results</h1>
+        {QueryResults}
         </body>
         </html>
         """
-        return head.data(using: .utf8)! + d + tail.data(using: .utf8)!
+    }
+
+    public func serialize<R: Sequence, T: Sequence>(_ results: QueryResult<R, T>) throws -> Data where R.Element == TermResult, T.Element == Triple {
+        let d = try _serialize(results)
+        let template = "{QueryResults}".data(using: .utf8)!
+        var dd = htmlTemplate.data(using: .utf8)!
+        let range = dd.range(of: template)!
+        dd.replaceSubrange(range, with: d)
+        return dd
     }
     
     public func _serialize<R: Sequence, T: Sequence>(_ results: QueryResult<R, T>) throws -> Data where R.Element == TermResult, T.Element == Triple {
