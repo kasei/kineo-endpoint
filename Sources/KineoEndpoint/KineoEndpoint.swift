@@ -52,8 +52,10 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
     let verbose = false
     let accept = parseAccept(acceptHeader.first ?? "*/*").map { $0.0 }
     
+//    print(query.serialize())
     let e       = QueryPlanEvaluator(store: store, dataset: dataset)
-    
+//    let e = SimpleQueryEvaluator(store: store, dataset: dataset, verbose: verbose)
+
     var resp = HTTPResponse(status: .ok)
     
     do {
@@ -85,7 +87,7 @@ func dataset<Q : QuadStoreProtocol>(from components: URLComponents, for store: Q
     let dataset = Dataset(defaultGraphs: defaultGraphs, namedGraphs: namedGraphs)
     if dataset.isEmpty {
         let defaultGraph = store.graphs().next() ?? Term(iri: "tag:kasei.us,2018:default-graph")
-        return Dataset(defaultGraphs: [defaultGraph])
+        return Dataset(defaultGraphs: [defaultGraph], namedGraphs: Array(store.graphs().dropFirst()))
     } else {
         return dataset
     }
