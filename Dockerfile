@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir /work
 WORKDIR /work
 
+RUN mkdir -p /data/default
+RUN mkdir -p /data/named
+
 COPY Package.swift .
 COPY Sources Sources
 RUN swift build
@@ -21,4 +24,4 @@ VOLUME ["/data"]
 ENV PATH="/work:/work/.build/debug:${PATH}"
 
 ENTRYPOINT ["kineo-endpoint"]
-CMD ["kineo-endpoint"]
+CMD ["-D", "/data"]
