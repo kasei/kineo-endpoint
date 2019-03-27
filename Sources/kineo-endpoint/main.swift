@@ -102,7 +102,16 @@ guard CommandLine.arguments.count > 1 else {
                 the default graph.
         
         -n, --named-graph=FILENAME
-                Parse RDF from the named file into a named graph.
+                Parse RDF from the named file into a graph named with the
+                corresponding file: URL.
+        
+        -D PATH
+                Parse RDF files in subdirectories of the supplied path to construct
+                a complete RDF dataset. Files in the $PATH/default directory will be
+                merged into the default graph. Files in the $PATH/named directory
+                will be loaded into a graph named with their corresponding file: URL.
+        
+        
 
         """)
     exit(1)
