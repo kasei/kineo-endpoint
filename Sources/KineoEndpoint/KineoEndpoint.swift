@@ -15,6 +15,7 @@ public struct ServiceDescription {
     public var resultFormats: [SPARQLContentNegotiator.ResultFormat]
     public var extensionFunctions: [URL]
     public var features: [String]
+    public var dataset: Dataset
     public var graphDescriptions: [Term:GraphDescription]
 }
 
@@ -142,7 +143,27 @@ private func serialize(serviceDescription sd: ServiceDescription, for components
         output += "    sd:feature \(sd.features.map {"\(Term(iri: $0))"}.joined(separator: ", ")) ;\n"
     }
     
-    // TODO: serialize sd.graphDescriptions
+    output += "    sd:defaultDataset [\n"
+    output += "        a sd:Dataset ;\n"
+    if let defaultGraph = sd.dataset.defaultGraphs.first, let graphDescription = sd.graphDescriptions[defaultGraph] {
+        output += "        sd:defaultGraph [\n"
+        output += "            a sd:Graph ;\n"
+        output += "            void:triples \(graphDescription.triplesCount) ;\n"
+        output += "        ] ;\n"
+    }
+    for namedGraph in sd.dataset.namedGraphs {
+        if let graphDescription = sd.graphDescriptions[namedGraph] {
+            output += "        sd:namedGraph [\n"
+            output += "            a sd:NamedGraph ;\n"
+            output += "            sd:name \(namedGraph) ;\n"
+            output += "            sd:graph [\n"
+            output += "                a sd:Graph ;\n"
+            output += "                void:triples \(graphDescription.triplesCount) ;\n"
+            output += "            ] ;\n"
+            output += "        ] ;\n"
+        }
+    }
+    output += "    ] ;\n"
     
     output += "\t.\n"
     
@@ -179,7 +200,8 @@ private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPRe
                     resultFormats: negotiator.supportedSerializations,
                     extensionFunctions: [],
                     features: features,
-                    graphDescriptions: [:] // TODO: add graph descriptions
+                    dataset: ds,
+                    graphDescriptions: store.graphDescriptions
                 )
                 
                 return serialize(serviceDescription: sd, for: components)
