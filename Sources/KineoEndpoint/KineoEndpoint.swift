@@ -175,7 +175,7 @@ private func serialize(serviceDescription sd: ServiceDescription, for components
 private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPResponse {
     do {
         let u = req.http.url
-        guard let components = URLComponents(string: u.absoluteString) else { throw EndpointError(status: .badRequest, message: "Failed to access URL components") }
+        guard let components = URLComponents(string: u.absoluteString.replacingOccurrences(of: "+", with: "%20")) else { throw EndpointError(status: .badRequest, message: "Failed to access URL components") }
         let queryItems = components.queryItems ?? []
         let queries = queryItems.filter { $0.name == "query" }.compactMap { $0.value }
         if let sparql = queries.first {
@@ -250,6 +250,21 @@ public func endpointApplication<Q: QuadStoreProtocol>(services: Services? = nil,
     let services = services ?? Services.default()
     let app = try Application(services: services)
     let router = try app.make(Router.self)
+    
+    router.get("") { (req) -> HTTPResponse in
+        return HTTPResponse(status: .ok, headers: ["Content-Type": "text/html"], body: """
+            <form action="/sparql" method="get">
+                <div class="textarea">
+                    <label for="query">Query:</label><br/>
+                    <textarea id="query" cols="100" name="query" rows="30"></textarea>
+                </div>
+                <div>
+                    <button id="submit" type="submit">Submit</button>
+                </div>
+            </form>
+        """)
+    }
+    
     router.get("sparql") { (req) -> HTTPResponse in
         return try logQuery(req) {
             let store = try constructQuadStore(req)
