@@ -10,7 +10,7 @@ import KineoEndpoint
 import SPARQLSyntax
 import Kineo
 import Vapor
-import HDT
+//import HDT
 #if os(macOS)
 import os.signpost
 #endif
@@ -69,7 +69,7 @@ func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStore
 }
 
 let pageSize = 8192
-RDFSerializationConfiguration.shared.registerParser(HDTRDFParser.self, withType: "application/hdt", extensions: [".hdt"], mediaTypes: [])
+//RDFSerializationConfiguration.shared.registerParser(HDTRDFParser.self, withType: "application/hdt", extensions: [".hdt"], mediaTypes: [])
 guard CommandLine.arguments.count > 1 else {
     guard let pname = CommandLine.arguments.first else { fatalError("Missing command name") }
     print("""
