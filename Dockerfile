@@ -1,9 +1,11 @@
-FROM swift:4.2
+FROM swift:4.2.4
 
 RUN apt-get update && apt-get install -y \
 	build-essential \
 	libserd-dev \
 	libsqlite3-dev \
+	libssl-dev \
+	zlib1g-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /work
