@@ -151,46 +151,6 @@ if #available(OSX 10.14, *) {
 SPARQLContentNegotiator.shared.addSerializer(SPARQLHTMLSerializer<TermResult>())
 
 switch config.type {
-case .filePageDatabase(let filename):
-    guard let database = FilePageDatabase(filename, size: pageSize) else {
-        warn("Failed to open database file '\(filename)'")
-        exit(1)
-    }
-    if config.languageAware {
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
-        }
-        #endif
-        let app = try endpointApplication(services: services) { (req) throws -> LanguagePageQuadStore<FilePageDatabase> in
-            let header = req.http.headers["Accept-Language"].first ?? "*"
-            let acceptLanguages = parseAccept(header)
-            let store = try LanguagePageQuadStore(database: database, acceptLanguages: acceptLanguages)
-            try load(store: store, configuration: config)
-            return store
-        }
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-            os_signpost(.event, log: log, name: "Endpoint", "Startup")
-        }
-        #endif
-        try app.run()
-    } else {
-        let store = try PageQuadStore(database: database)
-        try load(store: store, configuration: config)
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
-        }
-        #endif
-        let app = try endpointApplication(services: services) { (_) in return store }
-        #if os(macOS)
-        if #available(OSX 10.14, *) {
-            os_signpost(.event, log: log, name: "Endpoint", "Startup")
-        }
-        #endif
-        try app.run()
-    }
 case .sqliteFileDatabase(let filename):
     let fileManager = FileManager.default
     let initialize = !fileManager.fileExists(atPath: filename)
