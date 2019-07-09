@@ -139,14 +139,14 @@ let startSecond = getCurrentDateSeconds()
 var count = 0
 
 switch config.type {
-case .filePageDatabase(let filename):
-    guard let database = FilePageDatabase(filename, size: pageSize) else {
-        warn("Failed to open database file '\(filename)'")
-        exit(1)
-    }
-    
-    let store = try PageQuadStore(database: database)
-    count += try load(store: store, configuration: config)
+//case .filePageDatabase(let filename):
+//    guard let database = FilePageDatabase(filename, size: pageSize) else {
+//        warn("Failed to open database file '\(filename)'")
+//        exit(1)
+//    }
+//    
+//    let store = try PageQuadStore(database: database)
+//    count += try load(store: store, configuration: config)
 case .sqliteFileDatabase(let filename):
     let fileManager = FileManager.default
     let initialize = !fileManager.fileExists(atPath: filename)
