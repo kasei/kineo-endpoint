@@ -9,7 +9,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/kasei/kineo.git", .branch("sparql-12")),
 //        .package(url: "https://github.com/kasei/swift-hdt.git", .upToNextMinor(from: "0.0.6")),
-        .package(url: "https://github.com/vapor/vapor.git", .upToNextMinor(from: "3.2.0")),
+        .package(url: "https://github.com/vapor/vapor.git", .upToNextMajor(from: "3.2.0")),
         .package(url: "https://github.com/alexaubry/HTMLString", .upToNextMinor(from: "4.0.0")),
     ],
     targets: [
