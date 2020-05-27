@@ -10,6 +10,7 @@ import KineoEndpoint
 import SPARQLSyntax
 import Kineo
 import Vapor
+import DiomedeQuadStore
 //import HDT
 #if os(macOS)
 import os.signpost
@@ -118,7 +119,6 @@ guard CommandLine.arguments.count > 1 else {
 }
 
 let config = try QuadStoreConfiguration(arguments: &CommandLine.arguments)
-
 var features = [String]()
 
 switch config.type {
@@ -151,6 +151,29 @@ if #available(OSX 10.14, *) {
 SPARQLContentNegotiator.shared.addSerializer(SPARQLHTMLSerializer<TermResult>())
 
 switch config.type {
+case .diomedeDatabase(let filename):
+    let fileManager = FileManager.default
+    let initialize = !fileManager.fileExists(atPath: filename)
+    guard let store = DiomedeQuadStore(path: filename, create: initialize) else {
+        fatalError("Failed to construct DiomedeQuadStore")
+    }
+    if config.languageAware {
+        fatalError()
+    } else {
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
+        }
+        #endif
+        try load(store: store, configuration: config)
+        let app = try endpointApplication(services: services) { (_) in return store }
+        #if os(macOS)
+        if #available(OSX 10.14, *) {
+            os_signpost(.event, log: log, name: "Endpoint", "Startup")
+        }
+        #endif
+        try app.run()
+    }
 case .sqliteFileDatabase(let filename):
     let fileManager = FileManager.default
     let initialize = !fileManager.fileExists(atPath: filename)

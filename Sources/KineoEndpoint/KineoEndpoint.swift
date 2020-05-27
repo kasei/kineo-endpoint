@@ -68,7 +68,6 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
             print("No Last-Modified date could be computed")
         }
     } catch QueryError.evaluationError {}
-    
     let results = try e.evaluate(query: query)
     
     let negotiator = SPARQLContentNegotiator.shared
@@ -87,6 +86,7 @@ func dataset<Q : QuadStoreProtocol>(from components: URLComponents, for store: Q
     let namedGraphs = queryItems.filter { $0.name == "named-graph-uri" }.compactMap { $0.value }.map { Term(iri: $0) }
     let dataset = Dataset(defaultGraphs: defaultGraphs, namedGraphs: namedGraphs)
     if dataset.isEmpty {
+        let graphs = Array(store.graphs())
         let defaultGraph = store.graphs().next() ?? Term(iri: "tag:kasei.us,2018:default-graph")
         return Dataset(defaultGraphs: [defaultGraph], namedGraphs: Array(store.graphs().dropFirst()))
     } else {

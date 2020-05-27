@@ -10,7 +10,7 @@ import Foundation
 import SPARQLSyntax
 import Kineo
 import KineoEndpoint
-
+import DiomedeQuadStore
 /**
  If necessary, create a new quadstore in the supplied database.
  */
@@ -89,7 +89,7 @@ func printSummary<D : PageDatabase>(of database: D) throws {
     database.read { (m) in
         guard let store = try? MediatedPageQuadStore(mediator: m) else { return }
         print("Quad Store")
-        if let v = try? store.effectiveVersion(), let version = v {
+        if let version = try? store.effectiveVersion() {
             let versionDate = getDateString(seconds: version)
             print("Version: \(versionDate)")
         }
@@ -105,7 +105,7 @@ func printSummary<D : PageDatabase>(of database: D) throws {
                 object: .variable("o", binding: true),
                 graph: .bound(graph)
             )
-            let count = store.count(matching: pattern)
+            let count = store.countQuads(matching: pattern)
             print("Graph: \(graph) (\(count) triples)")
         }
         
@@ -139,6 +139,13 @@ let startSecond = getCurrentDateSeconds()
 var count = 0
 
 switch config.type {
+case .diomedeDatabase(let filename):
+    let fileManager = FileManager.default
+    let initialize = !fileManager.fileExists(atPath: filename)
+    guard let store = DiomedeQuadStore(path: filename, create: initialize) else {
+        fatalError()
+    }
+    count += try load(store: store, configuration: config)
 //case .filePageDatabase(let filename):
 //    guard let database = FilePageDatabase(filename, size: pageSize) else {
 //        warn("Failed to open database file '\(filename)'")
