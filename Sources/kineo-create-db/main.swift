@@ -52,9 +52,10 @@ func parse<Q : MutableQuadStoreProtocol>(_ store: Q, files: [String], graph defa
             throw KineoEndpoint.EndpointSetupError.parseError("Failed to determine appropriate parser for file: \(filename)")
         }
         
+        let defaultGraph = Term(iri: "tag:kasei.us,2018:default-graph")
         var quads = [Quad]()
-        count = try p.parser.parseFile(filename, mediaType: p.mediaType, base: graph.value) { (s, p, o) in
-            let q = Quad(subject: s, predicate: p, object: o, graph: graph)
+        count = try p.parser.parseFile(filename, mediaType: p.mediaType, defaultGraph: defaultGraph, base: graph.value) { (s, p, o, g) in
+            let q = Quad(subject: s, predicate: p, object: o, graph: g)
             quads.append(q)
         }
         
