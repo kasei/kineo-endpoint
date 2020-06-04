@@ -148,7 +148,7 @@ if #available(OSX 10.14, *) {
 }
 #endif
 
-SPARQLContentNegotiator.shared.addSerializer(SPARQLHTMLSerializer<TermResult>())
+SPARQLContentNegotiator.shared.addSerializer(SPARQLHTMLSerializer<SPARQLResultSolution<Term>>())
 
 switch config.type {
 case .diomedeDatabase(let filename):

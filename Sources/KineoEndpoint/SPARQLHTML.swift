@@ -40,7 +40,7 @@ public struct SPARQLHTMLSerializer<T: ResultProtocol> : SPARQLSerializable where
         """
     }
 
-    public func serialize<R: Sequence, T: Sequence>(_ results: QueryResult<R, T>) throws -> Data where R.Element == TermResult, T.Element == Triple {
+    public func serialize<R: Sequence, T: Sequence>(_ results: QueryResult<R, T>) throws -> Data where R.Element == SPARQLResultSolution<Term>, T.Element == Triple {
         let d = try _serialize(results)
         let template = "{QueryResults}".data(using: .utf8)!
         var dd = htmlTemplate.data(using: .utf8)!
@@ -49,7 +49,7 @@ public struct SPARQLHTMLSerializer<T: ResultProtocol> : SPARQLSerializable where
         return dd
     }
     
-    public func _serialize<R: Sequence, T: Sequence>(_ results: QueryResult<R, T>) throws -> Data where R.Element == TermResult, T.Element == Triple {
+    public func _serialize<R: Sequence, T: Sequence>(_ results: QueryResult<R, T>) throws -> Data where R.Element == SPARQLResultSolution<Term>, T.Element == Triple {
         switch results {
         case .boolean(let v):
             let s = v ? "true" : "false"

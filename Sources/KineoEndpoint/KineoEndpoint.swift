@@ -54,9 +54,9 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
     let accept = parseAccept(acceptHeader.first ?? "*/*").map { $0.0 }
     
 //    print(query.serialize())
-    let e       = QueryPlanEvaluator(store: store, dataset: dataset)
 //    let e = SimpleQueryEvaluator(store: store, dataset: dataset, verbose: verbose)
 
+    let USE_SIMPLE = false
     var resp = HTTPResponse(status: .ok)
     
     do {
@@ -67,9 +67,21 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
         } else {
             print("No Last-Modified date could be computed")
         }
+        
+        if USE_SIMPLE {
+            let results = try e.evaluate(query: query)
+            return try response(for: results, accept: accept)
+        }
     } catch QueryError.evaluationError {}
+
+
+    let e       = QueryPlanEvaluator(store: store, dataset: dataset)
     let results = try e.evaluate(query: query)
-    
+    return try response(for: results, accept: accept)
+}
+
+func response<S: Sequence>(for results: QueryResult<S, [Triple]>, accept: [String]) throws -> HTTPResponse where S.Element == SPARQLResultSolution<Term> {
+    var resp = HTTPResponse(status: .ok)
     let negotiator = SPARQLContentNegotiator.shared
     guard let serializer = negotiator.negotiateSerializer(for: results, accept: accept) else {
         throw EndpointError(status: .notAcceptable, message: "No appropriate serializer available for query results")
