@@ -77,23 +77,32 @@ guard CommandLine.arguments.count > 1 else {
         Usage:
         
             \(pname) -m             [ARGS] [DATASET-DEFINITION]
-            \(pname) -s DATABASE.db [ARGS] [DATASET-DEFINITION]
+            \(pname) -q DATABASE.db [ARGS] [DATASET-DEFINITION]
+            \(pname) -s DATABASE.sqlite [ARGS] [DATASET-DEFINITION]
 
         RDF data may be loaded at startup to construct the dataset using:
 
         Options:
         
         -l, -language
-                Enable language-aware processing. This will use the Accept-Language
-                request header to return only localized data that is in a language
-                acceptable to the client.
+                Enable language-aware processing. (Memory- and SQLite-based
+                quadstores only.)
+        
+                This will use the Accept-Language request header to return
+                only localized data that is in a language acceptable to the
+                client.
         
         -m, --memory
                 Use (non-persistent) in-memory storage for the endpoint data
         
-        -s DATABASE
-                Use the named database file as persistent storage for the endpoint
-                data.
+        -s DATABASE.sqlite
+                Use the named SQLite database file as persistent storage for
+                the endpoint data.
+
+        -q DATABASE.db
+                Use the named database file as persistent storage for
+                the endpoint data. This uses the Diomede Quadstore (LMDB)
+                storage format.
 
         Dataset Definition:
         
@@ -112,8 +121,6 @@ guard CommandLine.arguments.count > 1 else {
                 merged into the default graph. Files in the $PATH/named directory
                 will be loaded into a graph named with their corresponding file: URL.
         
-        
-
         """)
     exit(1)
 }
