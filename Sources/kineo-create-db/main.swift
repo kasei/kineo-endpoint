@@ -11,22 +11,6 @@ import SPARQLSyntax
 import Kineo
 import KineoEndpoint
 import DiomedeQuadStore
-/**
- If necessary, create a new quadstore in the supplied database.
- */
-func setup<D : PageDatabase>(_ database: D, version: Version) throws {
-    try database.update(version: version) { (m) in
-        Logger.shared.push(name: "QuadStore setup")
-        defer { Logger.shared.pop(printSummary: false) }
-        do {
-            _ = try MediatedPageQuadStore.create(mediator: m)
-        } catch let e {
-            warn("*** \(e)")
-            throw DatabaseUpdateError.rollback
-        }
-    }
-}
-
 
 /**
  Parse the supplied RDF files and load the resulting RDF triples into the database's
@@ -82,39 +66,6 @@ func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStore
     return count
 }
 
-/**
- Print basic information about the database's QuadStore including the last-modified time,
- the number of quads, the available indexes, and the count of triples in each graph.
- */
-func printSummary<D : PageDatabase>(of database: D) throws {
-    database.read { (m) in
-        guard let store = try? MediatedPageQuadStore(mediator: m) else { return }
-        print("Quad Store")
-        if let version = try? store.effectiveVersion() {
-            let versionDate = getDateString(seconds: version)
-            print("Version: \(versionDate)")
-        }
-        print("Quads: \(store.count)")
-
-        let indexes = store.availableQuadIndexes.joined(separator: ", ")
-        print("Indexes: \(indexes)")
-        
-        for graph in store.graphs() {
-            let pattern = QuadPattern(
-                subject: .variable("s", binding: true),
-                predicate: .variable("p", binding: true),
-                object: .variable("o", binding: true),
-                graph: .bound(graph)
-            )
-            let count = store.countQuads(matching: pattern)
-            print("Graph: \(graph) (\(count) triples)")
-        }
-        
-        print("")
-    }
-    
-}
-
 let pageSize = 8192
 var verbose = true
 let argscount = CommandLine.arguments.count
@@ -147,14 +98,6 @@ case .diomedeDatabase(let filename):
         fatalError()
     }
     count += try load(store: store, configuration: config)
-//case .filePageDatabase(let filename):
-//    guard let database = FilePageDatabase(filename, size: pageSize) else {
-//        warn("Failed to open database file '\(filename)'")
-//        exit(1)
-//    }
-//    
-//    let store = try PageQuadStore(database: database)
-//    count += try load(store: store, configuration: config)
 case .sqliteFileDatabase(let filename):
     let fileManager = FileManager.default
     let initialize = !fileManager.fileExists(atPath: filename)
@@ -169,6 +112,5 @@ let endTime = getCurrentTime()
 let elapsed = Double(endTime - startTime)
 let tps = Double(count) / elapsed
 if verbose {
-//    Logger.shared.printSummary()
     warn("elapsed time: \(elapsed)s (\(tps)/s)")
 }
