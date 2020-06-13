@@ -1,4 +1,4 @@
-FROM swift:5.0
+FROM swift:5.2	
 
 RUN apt-get update && apt-get install -y \
 	build-essential \
@@ -15,6 +15,7 @@ RUN mkdir -p /data/default
 RUN mkdir -p /data/named
 
 COPY Package.swift .
+RUN swift package update
 COPY Sources Sources
 RUN swift build
 COPY entrypoint.sh entrypoint.sh
