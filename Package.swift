@@ -16,7 +16,7 @@ let package = Package(
         .package(name: "Vapor", url: "https://github.com/vapor/vapor.git", from: "3.2.0"),
         .package(name: "HTMLString", url: "https://github.com/alexaubry/HTMLString", .upToNextMinor(from: "4.0.0")),
        .package(name: "Diomede", url: "https://github.com/kasei/diomede.git", .upToNextMinor(from: "0.0.29")),
-//        .package(url: "https://github.com/kasei/swift-hdt.git", .upToNextMinor(from: "0.0.6")),
+//       .package(url: "https://github.com/kasei/swift-hdt.git", .upToNextMinor(from: "0.0.6")),
     ],
     targets: [
     	.target(

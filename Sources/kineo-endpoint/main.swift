@@ -69,10 +69,7 @@ func load<Q: MutableQuadStoreProtocol>(store: Q, configuration config: QuadStore
     return count
 }
 
-let pageSize = 8192
-//RDFSerializationConfiguration.shared.registerParser(HDTRDFParser.self, withType: "application/hdt", extensions: [".hdt"], mediaTypes: [])
-guard CommandLine.arguments.count > 1 else {
-    guard let pname = CommandLine.arguments.first else { fatalError("Missing command name") }
+func usage(_ pname: String) {
     print("""
         Usage:
         
@@ -115,6 +112,10 @@ guard CommandLine.arguments.count > 1 else {
                 Parse RDF from the named file into a graph named with the
                 corresponding file: URL.
         
+        -g IRI FILENAME
+
+            Parse RDF from the named file into the graph named IRI.
+
         -D PATH
                 Parse RDF files in subdirectories of the supplied path to construct
                 a complete RDF dataset. Files in the $PATH/default directory will be
@@ -122,11 +123,38 @@ guard CommandLine.arguments.count > 1 else {
                 will be loaded into a graph named with their corresponding file: URL.
         
         """)
+}
+
+let pname = CommandLine.arguments[0]
+guard CommandLine.arguments.count > 1 else {
+    usage(pname)
     exit(1)
 }
 
 let config = try QuadStoreConfiguration(arguments: &CommandLine.arguments)
+
+let argscount = CommandLine.arguments.count
+var args = PeekableIterator(generator: CommandLine.arguments.makeIterator())
+
+//RDFSerializationConfiguration.shared.registerParser(HDTRDFParser.self, withType: "application/hdt", extensions: [".hdt"], mediaTypes: [])
+guard let pname = args.next() else { fatalError("Missing command name") }
+
 var features = [String]()
+
+var defaultGraph : Term? = nil
+repeat {
+    guard let next = args.peek(), next.hasPrefix("-") else { break }
+    if next == "-G" {
+        _ = args.next()
+        guard let iri = args.next() else { fatalError("No IRI value given after -g") }
+        defaultGraph = Term(value: iri, type: .iri)
+    } else if next == "--help" {
+        usage(pname)
+        exit(1)
+    }
+} while true
+CommandLine.arguments = [pname] + args.elements()
+print("::: \(CommandLine.arguments)")
 
 switch config.type {
 case .memoryDatabase, .sqliteMemoryDatabase:
@@ -173,7 +201,7 @@ case .diomedeDatabase(let filename):
         }
         #endif
         try load(store: store, configuration: config)
-        let app = try endpointApplication(services: services) { (_) in return store }
+        let app = try endpointApplication(services: services, defaultGraph: defaultGraph) { (_) in return store }
         #if os(macOS)
         if #available(OSX 10.14, *) {
             os_signpost(.event, log: log, name: "Endpoint", "Startup")
@@ -192,7 +220,7 @@ case .sqliteFileDatabase(let filename):
         }
         #endif
         try load(store: store, configuration: config)
-        let app = try endpointApplication(services: services) { (req) throws -> SQLiteLanguageQuadStore in
+        let app = try endpointApplication(services: services, defaultGraph: defaultGraph) { (req) throws -> SQLiteLanguageQuadStore in
             let header = req.http.headers["Accept-Language"].first ?? "*"
             let acceptLanguages = parseAccept(header)
             let lstore = SQLiteLanguageQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
@@ -211,7 +239,7 @@ case .sqliteFileDatabase(let filename):
         }
         #endif
         try load(store: store, configuration: config)
-        let app = try endpointApplication(services: services) { (_) in return store }
+        let app = try endpointApplication(services: services, defaultGraph: defaultGraph) { (_) in return store }
         #if os(macOS)
         if #available(OSX 10.14, *) {
             os_signpost(.event, log: log, name: "Endpoint", "Startup")
@@ -228,7 +256,7 @@ case .memoryDatabase:
             os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
         }
         #endif
-        let app = try endpointApplication(services: services) { (req) throws -> LanguageMemoryQuadStore in
+        let app = try endpointApplication(services: services, defaultGraph: defaultGraph) { (req) throws -> LanguageMemoryQuadStore in
             let header = req.http.headers["Accept-Language"].first ?? "*"
             let acceptLanguages = parseAccept(header)
             let lstore = LanguageMemoryQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
@@ -246,7 +274,7 @@ case .memoryDatabase:
             os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
         }
         #endif
-        let app = try endpointApplication(services: services) { (_) in return store }
+        let app = try endpointApplication(services: services, defaultGraph: defaultGraph) { (_) in return store }
         #if os(macOS)
         if #available(OSX 10.14, *) {
             os_signpost(.event, log: log, name: "Endpoint", "Startup")
@@ -263,7 +291,7 @@ case .sqliteMemoryDatabase:
             os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
         }
         #endif
-        let app = try endpointApplication(services: services) { (req) throws -> SQLiteLanguageQuadStore in
+        let app = try endpointApplication(services: services, defaultGraph: defaultGraph) { (req) throws -> SQLiteLanguageQuadStore in
             let header = req.http.headers["Accept-Language"].first ?? "*"
             let acceptLanguages = parseAccept(header)
             let lstore = SQLiteLanguageQuadStore(quadstore: store, acceptLanguages: acceptLanguages)
@@ -281,7 +309,7 @@ case .sqliteMemoryDatabase:
             os_signpost(.event, log: log, name: "Endpoint", "Constructing application model")
         }
         #endif
-        let app = try endpointApplication(services: services) { (_) in return store }
+        let app = try endpointApplication(services: services, defaultGraph: defaultGraph) { (_) in return store }
         #if os(macOS)
         if #available(OSX 10.14, *) {
             os_signpost(.event, log: log, name: "Endpoint", "Startup")

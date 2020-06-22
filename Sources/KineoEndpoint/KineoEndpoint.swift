@@ -92,15 +92,15 @@ func response<S: Sequence>(for results: QueryResult<S, [Triple]>, accept: [Strin
     return resp
 }
 
-func dataset<Q : QuadStoreProtocol>(from components: URLComponents, for store: Q) throws -> Dataset {
+func dataset<Q : QuadStoreProtocol>(from components: URLComponents, for store: Q, defaultGraph: Term? = nil) throws -> Dataset {
     let queryItems = components.queryItems ?? []
     let defaultGraphs = queryItems.filter { $0.name == "default-graph-uri" }.compactMap { $0.value }.map { Term(iri: $0) }
     let namedGraphs = queryItems.filter { $0.name == "named-graph-uri" }.compactMap { $0.value }.map { Term(iri: $0) }
     let dataset = Dataset(defaultGraphs: defaultGraphs, namedGraphs: namedGraphs)
     if dataset.isEmpty {
         let graphs = Array(store.graphs())
-        let defaultGraph = store.graphs().next() ?? Term(iri: "tag:kasei.us,2018:default-graph")
-        return Dataset(defaultGraphs: [defaultGraph], namedGraphs: Array(store.graphs().dropFirst()))
+        let graph = defaultGraph ?? store.graphs().next() ?? Term(iri: "tag:kasei.us,2018:default-graph")
+        return Dataset(defaultGraphs: [graph], namedGraphs: Array(store.graphs().dropFirst()))
     } else {
         return dataset
     }
@@ -184,7 +184,7 @@ private func serialize(serviceDescription sd: ServiceDescription, for components
     return resp
 }
 
-private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPResponse {
+private func get<Q: QuadStoreProtocol>(req : Request, store: Q, defaultGraph: Term?) throws -> HTTPResponse {
     do {
         let u = req.http.url
         guard let components = URLComponents(string: u.absoluteString.replacingOccurrences(of: "+", with: "%20")) else { throw EndpointError(status: .badRequest, message: "Failed to access URL components") }
@@ -198,7 +198,7 @@ private func get<Q: QuadStoreProtocol>(req : Request, store: Q) throws -> HTTPRe
             
             let accept = req.http.headers["Accept"]
             
-            let ds = try dataset(from: components, for: store)
+            let ds = try dataset(from: components, for: store, defaultGraph: defaultGraph)
             return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
         } else {
             // Return a Service Description
@@ -258,7 +258,7 @@ func logQuery<T>(_ object: AnyObject, _ handler: () throws -> T) rethrows -> T {
     #endif
 }
 
-public func endpointApplication<Q: QuadStoreProtocol>(services: Services? = nil, constructQuadStore: @escaping (Request) throws -> Q) throws -> Application {
+public func endpointApplication<Q: QuadStoreProtocol>(services: Services? = nil, defaultGraph: Term? = nil, constructQuadStore: @escaping (Request) throws -> Q) throws -> Application {
     let services = services ?? Services.default()
     let app = try Application(services: services)
     let router = try app.make(Router.self)
@@ -280,7 +280,7 @@ public func endpointApplication<Q: QuadStoreProtocol>(services: Services? = nil,
     router.get("sparql") { (req) -> HTTPResponse in
         return try logQuery(req) {
             let store = try constructQuadStore(req)
-            return try get(req: req, store: store)
+            return try get(req: req, store: store, defaultGraph: defaultGraph)
         }
     }
     
@@ -299,7 +299,7 @@ public func endpointApplication<Q: QuadStoreProtocol>(services: Services? = nil,
                     guard let sparqlData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No query supplied") }
                     guard var p = SPARQLParser(data: sparqlData) else { throw EndpointError(status: .internalServerError, message: "Failed to construct SPARQL parser") }
                     let query = try p.parseQuery()
-                    let ds = try dataset(from: components, for: store)
+                    let ds = try dataset(from: components, for: store, defaultGraph: defaultGraph)
                     return try evaluate(query, using: store, dataset: ds, acceptHeader: accept)
                 case .some("application/x-www-form-urlencoded"):
                     guard let formData = req.http.body.data else { throw EndpointError(status: .badRequest, message: "No form data supplied") }
