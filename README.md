@@ -22,13 +22,13 @@ Alternatively, a persistent database file (`geo.db`) can be created and loaded
 with N-Triples or Turtle files offline:
 
 ```
-% ./.build/release/kineo-create-db -s geo.db --default-graph=examples/geo-data/geo.ttl
+% ./.build/release/kineo-create-db -q geo.db --default-graph=examples/geo-data/geo.ttl
 ```
 
 After loading data, an endpoint can be started using this persistent database:
 
 ```
-./.build/release/kineo-endpoint -s geo.db &
+./.build/release/kineo-endpoint -q geo.db &
 ```
 
 ### Query
