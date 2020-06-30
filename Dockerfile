@@ -17,14 +17,14 @@ RUN mkdir -p /data/named
 COPY Package.swift .
 RUN swift package update
 COPY Sources Sources
-RUN swift build
+RUN swift build -c release
 COPY entrypoint.sh entrypoint.sh
 
 RUN mkdir /endpoint
 
 EXPOSE 8080
 VOLUME ["/data"]
-ENV PATH="/work:/work/.build/debug:${PATH}"
+ENV PATH="/work:/work/.build/release:${PATH}"
 
 ENTRYPOINT ["kineo-endpoint"]
 CMD ["-D", "/data"]
