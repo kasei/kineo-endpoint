@@ -11,7 +11,7 @@ let package = Package(
         	targets: ["kineo-endpoint"]),
 	],    
     dependencies: [
-       .package(name: "Kineo", url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.89")),
+       .package(name: "Kineo", url: "https://github.com/kasei/kineo.git", .upToNextMinor(from: "0.0.91")),
 //        .package(name: "Kineo", url: "https://github.com/kasei/kineo.git", .branch("sparql-12")),
         .package(name: "Vapor", url: "https://github.com/vapor/vapor.git", from: "3.2.0"),
         .package(name: "HTMLString", url: "https://github.com/alexaubry/HTMLString", .upToNextMinor(from: "4.0.0")),

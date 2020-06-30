@@ -17,6 +17,121 @@ public struct ServiceDescription {
     public var features: [String]
     public var dataset: Dataset
     public var graphDescriptions: [Term:GraphDescription]
+    public var prefixes: [String:Term]
+    
+    public init(supportedLanguages: [QueryLanguage], resultFormats: [SPARQLContentNegotiator.ResultFormat], extensionFunctions: [URL], features: [String], dataset: Dataset, graphDescriptions: [Term:GraphDescription], prefixes: [String:Term]) {
+        self.supportedLanguages = supportedLanguages
+        self.resultFormats = resultFormats
+        self.extensionFunctions = extensionFunctions
+        self.features = features
+        self.dataset = dataset
+        self.graphDescriptions = graphDescriptions
+        self.prefixes = prefixes
+    }
+
+    public init<Q: QuadStoreProtocol>(from store: Q, withDataset ds: Dataset) throws {
+        let e = SimpleQueryEvaluator(store: store, dataset: ds, verbose: false)
+        let features : [String] = e.supportedFeatures.map { $0.rawValue }
+        let negotiator = SPARQLContentNegotiator.shared
+        self.init(
+            supportedLanguages: e.supportedLanguages,
+            resultFormats: negotiator.supportedSerializations,
+            extensionFunctions: [],
+            features: features,
+            dataset: ds,
+            graphDescriptions: store.graphDescriptions,
+            prefixes: [:]
+        )
+        
+        if let d = store as? PrefixNameSotringQuadStore {
+            self.prefixes = d.prefixes
+        }
+    }
+
+    public func serialize(for components: URLComponents) -> HTTPResponse {
+        let sd = self
+        var c = components
+        c.fragment = nil
+        if let qi = c.queryItems {
+            let ignore = Set(["query", "default-graph-uri", "named-graph-uri"])
+            c.queryItems = qi.filter { !ignore.contains($0.name.lowercased()) }
+        } else {
+            c.query = nil
+        }
+        let url = c.url!
+        
+        var output = """
+        @prefix sd: <http://www.w3.org/ns/sparql-service-description#> .
+        @prefix void: <http://rdfs.org/ns/void#> .
+        @prefix vann: <http://purl.org/vocab/vann/> .
+        
+        [] a sd:Service ;
+            sd:endpoint <\(url.absoluteString)> ;
+        
+        """
+        
+        if sd.supportedLanguages.count > 0 {
+            output += "    sd:supportedLanguage \(sd.supportedLanguages.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
+        }
+        
+        if sd.resultFormats.count > 0 {
+            output += "    sd:resultFormat \(sd.resultFormats.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
+        }
+        
+        if sd.extensionFunctions.count > 0 {
+            output += "    sd:extensionFunction \(sd.extensionFunctions.map {"\(Term(iri: $0.absoluteString))"}.joined(separator: ", ")) ;\n"
+        }
+        
+        if sd.features.count > 0 {
+            output += "    sd:feature \(sd.features.map {"\(Term(iri: $0))"}.joined(separator: ", ")) ;\n"
+        }
+        
+        output += "    sd:defaultDataset [\n"
+        output += "        a sd:Dataset ;\n"
+        if let defaultGraph = sd.dataset.defaultGraphs.first, let graphDescription = sd.graphDescriptions[defaultGraph] {
+            output += "        sd:defaultGraph [\n"
+            output += "            a sd:Graph ;\n"
+            output += "            void:triples \(graphDescription.triplesCount) ;\n"
+            output += "        ] ;\n"
+        }
+        for namedGraph in sd.dataset.namedGraphs {
+            if let graphDescription = sd.graphDescriptions[namedGraph] {
+                output += "        sd:namedGraph [\n"
+                output += "            a sd:NamedGraph ;\n"
+                output += "            sd:name \(namedGraph) ;\n"
+                output += "            sd:graph [\n"
+                output += "                a sd:Graph ;\n"
+                output += "                void:triples \(graphDescription.triplesCount) ;\n"
+                output += "            ] ;\n"
+                output += "        ] ;\n"
+            }
+        }
+        output += "    ] ;\n"
+        
+        if !self.prefixes.isEmpty {
+            output += "    sd:prefixDeclarations\n"
+            var decls = [String]()
+            let pairs = self.prefixes.sorted { $0.key.lexicographicallyPrecedes($1.key) }
+            for (_name, _iri) in pairs {
+                let name = Term(string: _name).ntriplesString()
+                let iri = Term(string: _iri.value).ntriplesString()
+                var prefixDefn = ""
+                prefixDefn += "        [\n"
+                prefixDefn += "            vann:preferredNamespacePrefix \(name) ;\n"
+                prefixDefn += "            vann:preferredNamespaceUri \(iri) ;\n"
+                prefixDefn += "        ]"
+                decls.append(prefixDefn)
+            }
+            output += decls.joined(separator: " ,\n")
+            output += "    ;\n"
+        }
+        
+        output += "\t.\n"
+        
+        var resp = HTTPResponse(status: .ok, body: output)
+        resp.headers.add(name: "Content-Type", value: "text/turtle")
+        return resp
+    }
 }
 
 public struct EndpointError : Error {
@@ -119,71 +234,6 @@ struct ProtocolRequest : Codable {
     }
 }
 
-private func serialize(serviceDescription sd: ServiceDescription, for components: URLComponents) -> HTTPResponse {
-    var c = components
-    c.fragment = nil
-    if let qi = c.queryItems {
-        let ignore = Set(["query", "default-graph-uri", "named-graph-uri"])
-        c.queryItems = qi.filter { !ignore.contains($0.name.lowercased()) }
-    } else {
-        c.query = nil
-    }
-    let url = c.url!
-    
-    var output = """
-    @prefix sd: <http://www.w3.org/ns/sparql-service-description#> .
-    @prefix void: <http://rdfs.org/ns/void#> .
-    
-    [] a sd:Service ;
-    sd:endpoint <\(url.absoluteString)> ;
-    
-    """
-    
-    if sd.supportedLanguages.count > 0 {
-        output += "    sd:supportedLanguage \(sd.supportedLanguages.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
-    }
-    
-    if sd.resultFormats.count > 0 {
-        output += "    sd:resultFormat \(sd.resultFormats.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
-    }
-    
-    if sd.extensionFunctions.count > 0 {
-        output += "    sd:extensionFunction \(sd.extensionFunctions.map {"\(Term(iri: $0.absoluteString))"}.joined(separator: ", ")) ;\n"
-    }
-    
-    if sd.features.count > 0 {
-        output += "    sd:feature \(sd.features.map {"\(Term(iri: $0))"}.joined(separator: ", ")) ;\n"
-    }
-    
-    output += "    sd:defaultDataset [\n"
-    output += "        a sd:Dataset ;\n"
-    if let defaultGraph = sd.dataset.defaultGraphs.first, let graphDescription = sd.graphDescriptions[defaultGraph] {
-        output += "        sd:defaultGraph [\n"
-        output += "            a sd:Graph ;\n"
-        output += "            void:triples \(graphDescription.triplesCount) ;\n"
-        output += "        ] ;\n"
-    }
-    for namedGraph in sd.dataset.namedGraphs {
-        if let graphDescription = sd.graphDescriptions[namedGraph] {
-            output += "        sd:namedGraph [\n"
-            output += "            a sd:NamedGraph ;\n"
-            output += "            sd:name \(namedGraph) ;\n"
-            output += "            sd:graph [\n"
-            output += "                a sd:Graph ;\n"
-            output += "                void:triples \(graphDescription.triplesCount) ;\n"
-            output += "            ] ;\n"
-            output += "        ] ;\n"
-        }
-    }
-    output += "    ] ;\n"
-    
-    output += "\t.\n"
-    
-    var resp = HTTPResponse(status: .ok, body: output)
-    resp.headers.add(name: "Content-Type", value: "text/turtle")
-    return resp
-}
-
 private func get<Q: QuadStoreProtocol>(req : Request, store: Q, defaultGraph: Term?) throws -> HTTPResponse {
     do {
         let u = req.http.url
@@ -204,19 +254,8 @@ private func get<Q: QuadStoreProtocol>(req : Request, store: Q, defaultGraph: Te
             // Return a Service Description
             do {
                 let ds = try dataset(from: components, for: store)
-                let e = SimpleQueryEvaluator(store: store, dataset: ds, verbose: false)
-                let features : [String] = e.supportedFeatures.map { $0.rawValue }
-                let negotiator = SPARQLContentNegotiator.shared
-                let sd = ServiceDescription(
-                    supportedLanguages: e.supportedLanguages,
-                    resultFormats: negotiator.supportedSerializations,
-                    extensionFunctions: [],
-                    features: features,
-                    dataset: ds,
-                    graphDescriptions: store.graphDescriptions
-                )
-                
-                return serialize(serviceDescription: sd, for: components)
+                let sd = try ServiceDescription(from: store, withDataset: ds)
+                return sd.serialize(for: components)
             } catch let e {
                 let output = "*** Failed to generate service description: \(e)"
                 return HTTPResponse(status: .internalServerError, body: output)
