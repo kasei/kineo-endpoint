@@ -43,7 +43,7 @@ public struct ServiceDescription {
             prefixes: [:]
         )
         
-        if let d = store as? PrefixNameSotringQuadStore {
+        if let d = store as? PrefixNameStoringQuadStore {
             self.prefixes = d.prefixes
         }
     }
