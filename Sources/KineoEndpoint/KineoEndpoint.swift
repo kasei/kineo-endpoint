@@ -60,30 +60,31 @@ public struct ServiceDescription {
         }
         let url = c.url!
         
+        let endpoint = Term(iri: url.absoluteString).ntriplesString()
         var output = """
         @prefix sd: <http://www.w3.org/ns/sparql-service-description#> .
         @prefix void: <http://rdfs.org/ns/void#> .
         @prefix vann: <http://purl.org/vocab/vann/> .
         
         [] a sd:Service ;
-            sd:endpoint <\(url.absoluteString)> ;
+            sd:endpoint \(endpoint) ;
         
         """
         
         if sd.supportedLanguages.count > 0 {
-            output += "    sd:supportedLanguage \(sd.supportedLanguages.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
+            output += "    sd:supportedLanguage \(sd.supportedLanguages.map {"\(Term(iri: $0.rawValue).ntriplesString())"}.joined(separator: ", ")) ;\n"
         }
         
         if sd.resultFormats.count > 0 {
-            output += "    sd:resultFormat \(sd.resultFormats.map {"\(Term(iri: $0.rawValue))"}.joined(separator: ", ")) ;\n"
+            output += "    sd:resultFormat \(sd.resultFormats.map {"\(Term(iri: $0.rawValue).ntriplesString())"}.joined(separator: ", ")) ;\n"
         }
         
         if sd.extensionFunctions.count > 0 {
-            output += "    sd:extensionFunction \(sd.extensionFunctions.map {"\(Term(iri: $0.absoluteString))"}.joined(separator: ", ")) ;\n"
+            output += "    sd:extensionFunction \(sd.extensionFunctions.map {"\(Term(iri: $0.absoluteString).ntriplesString())"}.joined(separator: ", ")) ;\n"
         }
         
         if sd.features.count > 0 {
-            output += "    sd:feature \(sd.features.map {"\(Term(iri: $0))"}.joined(separator: ", ")) ;\n"
+            output += "    sd:feature \(sd.features.map {"\(Term(iri: $0).ntriplesString())"}.joined(separator: ", ")) ;\n"
         }
         
         output += "    sd:defaultDataset [\n"
@@ -96,9 +97,10 @@ public struct ServiceDescription {
         }
         for namedGraph in sd.dataset.namedGraphs {
             if let graphDescription = sd.graphDescriptions[namedGraph] {
+                let ng = namedGraph.ntriplesString()
                 output += "        sd:namedGraph [\n"
                 output += "            a sd:NamedGraph ;\n"
-                output += "            sd:name \(namedGraph) ;\n"
+                output += "            sd:name \(ng) ;\n"
                 output += "            sd:graph [\n"
                 output += "                a sd:Graph ;\n"
                 output += "                void:triples \(graphDescription.triplesCount) ;\n"
@@ -109,7 +111,7 @@ public struct ServiceDescription {
         output += "    ] ;\n"
         
         if !self.prefixes.isEmpty {
-            output += "    sd:prefixDeclarations\n"
+            output += "    sd:namespaces\n"
             var decls = [String]()
             let pairs = self.prefixes.sorted { $0.key.lexicographicallyPrecedes($1.key) }
             for (_name, _iri) in pairs {
