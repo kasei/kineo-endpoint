@@ -15,11 +15,11 @@ public struct ServiceDescription {
     public var resultFormats: [SPARQLContentNegotiator.ResultFormat]
     public var extensionFunctions: [URL]
     public var features: [String]
-    public var dataset: Dataset
+    public var dataset: DatasetProtocol
     public var graphDescriptions: [Term:GraphDescription]
     public var prefixes: [String:Term]
     
-    public init(supportedLanguages: [QueryLanguage], resultFormats: [SPARQLContentNegotiator.ResultFormat], extensionFunctions: [URL], features: [String], dataset: Dataset, graphDescriptions: [Term:GraphDescription], prefixes: [String:Term]) {
+    public init(supportedLanguages: [QueryLanguage], resultFormats: [SPARQLContentNegotiator.ResultFormat], extensionFunctions: [URL], features: [String], dataset: DatasetProtocol, graphDescriptions: [Term:GraphDescription], prefixes: [String:Term]) {
         self.supportedLanguages = supportedLanguages
         self.resultFormats = resultFormats
         self.extensionFunctions = extensionFunctions
@@ -29,17 +29,24 @@ public struct ServiceDescription {
         self.prefixes = prefixes
     }
 
-    public init<Q: QuadStoreProtocol>(from store: Q, withDataset ds: Dataset) throws {
+    public init<Q: QuadStoreProtocol>(from store: Q, withDataset ds: DatasetProtocol, graphDescriptionLimit: Int = 100) throws {
         let e = SimpleQueryEvaluator(store: store, dataset: ds, verbose: false)
         let features : [String] = e.supportedFeatures.map { $0.rawValue }
         let negotiator = SPARQLContentNegotiator.shared
+        let descriptions : [Term:GraphDescription]
+        if store.graphsCount > graphDescriptionLimit {
+            descriptions = [:]
+        } else {
+            descriptions = store.graphDescriptions
+        }
+
         self.init(
             supportedLanguages: e.supportedLanguages,
             resultFormats: negotiator.supportedSerializations,
             extensionFunctions: [],
             features: features,
             dataset: ds,
-            graphDescriptions: store.graphDescriptions,
+            graphDescriptions: descriptions,
             prefixes: [:]
         )
         
@@ -95,7 +102,8 @@ public struct ServiceDescription {
             output += "            void:triples \(graphDescription.triplesCount) ;\n"
             output += "        ] ;\n"
         }
-        for namedGraph in sd.dataset.namedGraphs {
+        
+        for namedGraph in sd.graphDescriptions.keys {
             if let graphDescription = sd.graphDescriptions[namedGraph] {
                 let ng = namedGraph.ntriplesString()
                 output += "        sd:namedGraph [\n"
@@ -166,7 +174,7 @@ public func parseAccept(_ value: String) -> [(String, Double)] {
  
  - parameter query: The query to evaluate.
  */
-func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Dataset, acceptHeader: [String]) throws -> HTTPResponse {
+func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: DatasetProtocol, acceptHeader: [String]) throws -> HTTPResponse {
     let verbose = false
     let accept = parseAccept(acceptHeader.first ?? "*/*").map { $0.0 }
     
@@ -192,7 +200,7 @@ func evaluate<Q : QuadStoreProtocol>(_ query: Query, using store: Q, dataset: Da
     } catch QueryError.evaluationError {}
 
 
-    let e       = QueryPlanEvaluator(store: store, dataset: dataset)
+    let e       = QueryPlanEvaluator(store: store, dataset: dataset, verbose: true)
     let results = try e.evaluate(query: query)
     return try response(for: results, accept: accept)
 }
@@ -209,15 +217,13 @@ func response<S: Sequence>(for results: QueryResult<S, [Triple]>, accept: [Strin
     return resp
 }
 
-func dataset<Q : QuadStoreProtocol>(from components: URLComponents, for store: Q, defaultGraph: Term? = nil) throws -> Dataset {
+func dataset<Q : QuadStoreProtocol>(from components: URLComponents, for store: Q, defaultGraph: Term? = nil) throws -> DatasetProtocol {
     let queryItems = components.queryItems ?? []
     let defaultGraphs = queryItems.filter { $0.name == "default-graph-uri" }.compactMap { $0.value }.map { Term(iri: $0) }
     let namedGraphs = queryItems.filter { $0.name == "named-graph-uri" }.compactMap { $0.value }.map { Term(iri: $0) }
     let dataset = Dataset(defaultGraphs: defaultGraphs, namedGraphs: namedGraphs)
     if dataset.isEmpty {
-        let graphs = Array(store.graphs())
-        let graph = defaultGraph ?? store.graphs().next() ?? Term(iri: "tag:kasei.us,2018:default-graph")
-        return Dataset(defaultGraphs: [graph], namedGraphs: Array(store.graphs().dropFirst()))
+        return store.dataset()
     } else {
         return dataset
     }
